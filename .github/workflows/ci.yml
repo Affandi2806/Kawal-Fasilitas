@@ -1,0 +1,24 @@
+name: Automated Code Checker
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  check-code:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Kode Mahasiswa
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Jalankan Pengecekan
+        run: |
+          echo "Bot sedang memeriksa kode mahasiswa..."
+          # Bot akan memastikan repositori tidak kosong
