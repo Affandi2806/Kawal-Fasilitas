@@ -1,34 +1,68 @@
-# Kawal-Fasilitas
+# Kawal-Fasilitas 🏘️🛠️
 
-**Sistem Pengaduan dan Pelacakan Perbaikan Fasilitas Umum Desa Berbasis *Cloud Computing* dengan Transparansi Status *Real-Time***
+Kawal-Fasilitas adalah platform berbasis Progressive Web App (PWA) dan cloud computing yang dirancang untuk menjembatani interaksi antara warga dan pemerintah desa/kelurahan. Aplikasi ini mendigitalisasi siklus pelaporan kerusakan fasilitas umum mulai dari unggahan kerusakan oleh warga, validasi oleh perangkat desa, hingga konfirmasi perbaikan oleh tim lapangan.
 
-## 📌 Deskripsi Singkat
-**Kawal-Fasilitas** adalah platform berbasis *Progressive Web App* (PWA) dan *cloud computing* yang menjembatani warga dan pemerintah desa/kelurahan dalam melaporkan, memvalidasi, serta memantau progres perbaikan fasilitas umum secara transparan, akuntabel, dan *real-time* dari tahap pelaporan hingga penyelesaian.
+**Status Proyek:** Draft Sementara (v0.1)
 
----
-
-## 🔄 Alur Kerja & Fitur MVP
-
-1. **Warga (Pelapor):**
-   - Mengunggah foto kerusakan fasilitas umum (jalan berlubang, lampu jalan mati, dll.) beserta titik koordinat otomatis (*geotagging* GPS).
-   - Memantau status laporan secara *real-time*.
-2. **Admin Kelurahan/Desa (Verifikator):**
-   - Memvalidasi laporan yang masuk.
-   - Mengubah status laporan menjadi **"Diproses"** (atau **"Ditolak"** dengan alasan transparan).
-   - Mendisposisikan tugas perbaikan ke Tim Lapangan.
-3. **Tim Lapangan (Eksekutor):**
-   - Menerima rincian lokasi tugas perbaikan.
-   - Mengunggah foto bukti hasil perbaikan (*after*) untuk mengubah status laporan menjadi **"Selesai"**.
+**Dikembangkan oleh:**
+1. Ahmad Affandi Dwi Andoko
+2. Muhamad Ilham Fathony Sulton
+3. Mochammad Rizky Hendriyan Syah
 
 ---
 
-## 🛠️ Arsitektur & Tech Stack (Zero-Cost Cloud)
+## 🎯 Tujuan Utama
 
-| Komponen | Teknologi | Layanan Cloud (Hosting) | Kegunaan |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | React.js / Next.js (PWA) | Vercel / Netlify | Form pengaduan warga berbasis PWA & dasbor disposisi tugas |
-| **Backend** | Node.js & Express.js | Render | REST API & manajemen alur status (*status workflow*) laporan |
-| **Database & Storage** | Supabase (PostgreSQL) | Supabase Cloud | Penyimpanan foto bukti, titik geolokasi, dan log riwayat penanganan |
-| **CI/CD** | GitHub Actions | GitHub | Otomasi pengujian (*linting/testing*) dan *deployment* |
+* **Kemudahan Akses:** Menyediakan saluran pelaporan kerusakan fasilitas umum yang mudah diakses warga melalui PWA tanpa perlu instalasi rumit.
+* **Transparansi:** Memberikan pemantauan progres perbaikan secara real-time kepada pelapor.
+* **Efisiensi:** Meningkatkan efisiensi disposisi tugas dan akuntabilitas kerja dari Tim Lapangan.
 
 ---
+
+## 👥 Pengguna & Fitur Utama
+
+Sistem ini membagi akses menjadi tiga peran utama:
+
+### 1. Warga (Pelapor)
+* **Lapor Kerusakan:** Mengunggah foto kerusakan fasilitas umum (jalan berlubang, lampu mati, dll).
+* **Geotagging Otomatis:** Sistem otomatis merekam titik koordinat lokasi (GPS) bersamaan dengan foto.
+* **Lacak Laporan:** Memantau status laporan secara real-time.
+
+### 2. Admin Kelurahan/Desa (Verifikator)
+* **Validasi Laporan:** Melihat dan memvalidasi daftar laporan masuk dari warga.
+* **Manajemen Status:** Mengubah status laporan menjadi "Diproses" atau "Ditolak" (dilengkapi alasan penolakan).
+* **Disposisi Tugas:** Mendisposisikan tugas perbaikan ke entitas Tim Lapangan.
+
+### 3. Tim Lapangan (Eksekutor)
+* **Penerimaan Tugas:** Menerima rincian tugas perbaikan beserta titik koordinat lokasi.
+* **Laporan Selesai:** Mengunggah foto bukti hasil perbaikan (after). Sistem akan otomatis mengubah status laporan menjadi "Selesai".
+
+---
+
+## 🛠️ Teknologi yang Digunakan (Tech Stack)
+
+* **Frontend:** Next.js (Mobile-First Design, PWA)
+* **Backend:** Express.js
+* **Database / Cloud Backend:** Supabase
+* **CI/CD:** GitHub Actions
+* **Integrasi Pihak Ketiga:** Maps API (untuk visualisasi lokasi) & Cloud Storage (untuk aset foto)
+
+---
+
+## 🔄 Alur Kerja Sistem (Workflow)
+
+1. **Lapor:** Warga memotret kerusakan ➔ Sistem merekam GPS ➔ Laporan masuk (Status: *Menunggu Validasi*).
+2. **Validasi & Disposisi:** Admin meninjau laporan ➔ Menyetujui & Memilih Tim Lapangan (Status: *Diproses*).
+   *(Catatan: Jika ditolak, Admin wajib memberikan alasan).*
+3. **Eksekusi:** Tim Lapangan memperbaiki fasilitas ➔ Mengunggah foto bukti perbaikan ➔ Laporan selesai (Status: *Selesai*).
+
+---
+
+## 🚀 Pengembangan Lanjutan (Roadmap)
+
+- [ ] **Push Notifications:** Notifikasi real-time ke perangkat warga saat ada perubahan status laporan.
+- [ ] **Sistem Autentikasi Fleksibel:** Penentuan antara login menggunakan NIK/WhatsApp atau pelaporan anonim.
+- [ ] **SLA (Service Level Agreement):** Indikator peringatan kepada admin jika laporan mengendap dan belum ditindaklanjuti dalam batas waktu tertentu.
+
+---
+> *Dokumen ini berbasis pada Product Requirements Document (PRD) v0.1 per tanggal 9 Oktober 2026 dan dapat berubah seiring pengembangan lebih lanjut.*
