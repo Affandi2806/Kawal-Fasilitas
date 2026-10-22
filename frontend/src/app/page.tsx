@@ -9,10 +9,10 @@ export default function Home() {
         </p>
         <div className="mt-8 flex justify-center gap-4">
           <a
-            href="#"
+            href="/lapor"
             className="rounded-lg bg-green-600 px-6 py-3 font-medium text-white hover:bg-green-700"
           >
-            Lapor Kerusakan
+             Lapor Kerusakan
           </a>
           <a
             href="#"
