@@ -32,7 +32,7 @@ export async function findByEmail(email) {
   return data ?? null;
 }
 
-export async function create({ nama, email, password_hash, role = 'pelapor' }) {
+export async function create({ nama, email, password_hash, role = 'warga' }) {
   const { data, error } = await supabase
     .from(TABLE)
     .insert({ nama, email, password_hash, role })

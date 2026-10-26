@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import * as User from '../models/users.model.js';
 import { httpError } from '../middlewares/errorHandler.js';
 
-const VALID_ROLES = ['admin', 'teknisi', 'pelapor'];
+const VALID_ROLES = ['warga', 'admin', 'tim_lapangan'];
 
 export async function getAll(req, res, next) {
   try {
@@ -20,7 +20,7 @@ export async function getOne(req, res, next) {
 
 export async function register(req, res, next) {
   try {
-    const { nama, email, password, role = 'pelapor' } = req.body;
+    const { nama, email, password, role = 'warga' } = req.body;
     if (!nama || !email || !password) {
       throw httpError(400, 'nama, email, dan password wajib diisi');
     }

@@ -28,8 +28,8 @@ export async function create(req, res, next) {
     if (teknisi_id) {
       const teknisi = await findUser(teknisi_id);
       if (!teknisi) throw httpError(404, 'Teknisi tidak ditemukan');
-      if (teknisi.role !== 'teknisi' && teknisi.role !== 'admin') {
-        throw httpError(400, 'User yang ditugaskan harus ber-role teknisi atau admin');
+      if (teknisi.role !== 'tim_lapangan' && teknisi.role !== 'admin') {
+        throw httpError(400, 'User yang ditugaskan harus ber-role tim_lapangan atau admin');
       }
     }
     const perbaikan = await Perbaikan.create({
@@ -56,8 +56,8 @@ export async function update(req, res, next) {
     if (teknisi_id) {
       const teknisi = await findUser(teknisi_id);
       if (!teknisi) throw httpError(404, 'Teknisi tidak ditemukan');
-      if (teknisi.role !== 'teknisi' && teknisi.role !== 'admin') {
-        throw httpError(400, 'User yang ditugaskan harus ber-role teknisi atau admin');
+      if (teknisi.role !== 'tim_lapangan' && teknisi.role !== 'admin') {
+        throw httpError(400, 'User yang ditugaskan harus ber-role tim_lapangan atau admin');
       }
     }
     const perbaikan = await Perbaikan.updateById(req.params.id, req.body);
