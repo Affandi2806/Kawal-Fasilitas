@@ -1,5 +1,4 @@
 import * as Laporan from '../models/laporan.model.js';
-import { findById as findUser } from '../models/users.model.js';
 import { httpError } from '../middlewares/errorHandler.js';
 
 const VALID_STATUS = ['pending', 'diverifikasi', 'dalam_perbaikan', 'selesai', 'ditolak'];
@@ -21,11 +20,12 @@ export async function getOne(req, res, next) {
 
 export async function create(req, res, next) {
   try {
-    const { user_id, judul, deskripsi, lokasi, kategori, foto_url } = req.body;
-    if (!user_id || !judul || !deskripsi || !lokasi) {
-      throw httpError(400, 'user_id, judul, deskripsi, dan lokasi wajib diisi');
+    // user_id selalu dari token — client tidak bisa mengatasnamakan user lain.
+    const user_id = req.user.id;
+    const { judul, deskripsi, lokasi, kategori, foto_url } = req.body;
+    if (!judul || !deskripsi || !lokasi) {
+      throw httpError(400, 'judul, deskripsi, dan lokasi wajib diisi');
     }
-    if (!(await findUser(user_id))) throw httpError(404, 'User pelapor tidak ditemukan');
     const laporan = await Laporan.create({
       user_id, judul, deskripsi, lokasi, kategori: kategori ?? null, foto_url: foto_url ?? null,
     });

@@ -1,146 +1,117 @@
-# Kawal-Fasilitas — Backend
+# Kawal Fasilitas — Backend (Express.js + Supabase)
 
-REST API untuk sistem pelaporan & monitoring fasilitas umum desa/kelurahan.
-Dibangun dengan Express.js + Supabase (PostgreSQL).
+Backend API untuk aplikasi monitoring & pelaporan fasilitas.
+Issue: [Affandi2806/Kawal-Fasilitas#6](https://github.com/Affandi2806/Kawal-Fasilitas/issues/6)
 
-> Gambaran proyek keseluruhan (PWA, alur kerja, peran pengguna) ada di README utama repo.
+## Arsitektur
 
----
-
-## Tech Stack
-
-- **Express.js 4** (Node.js, ESM)
-- **Supabase** — PostgreSQL diakses via `service_role key` (bypass RLS secara sah, hanya dari server)
-- **bcryptjs** — hash password user
-
----
-
-## Struktur Direktori
-
-```text
-backend/
-├── src/
-│   ├── server.js                  # entry point (node src/server.js)
-│   ├── app.js                     # express app (CORS, JSON, routes, error handler)
-│   ├── config/
-│   │   └── supabase.js            # Supabase client (service_role)
-│   ├── routes/                    # definisi endpoint
-│   │   ├── users.routes.js
-│   │   ├── laporan.routes.js
-│   │   └── perbaikan.routes.js
-│   ├── controllers/               # logika request/response + validasi
-│   │   ├── users.controller.js
-│   │   ├── laporan.controller.js
-│   │   └── perbaikan.controller.js
-│   ├── models/                    # query ke Supabase per tabel
-│   │   ├── users.model.js
-│   │   ├── laporan.model.js
-│   │   └── perbaikan.model.js
-│   └── middlewares/
-│       └── errorHandler.js        # format error + 404
-├── migrations/
-│   └── 001_create_schema.sql      # skema users, laporan, perbaikan
-├── .env.example                   # contoh environment variable
-└── package.json
+```
+src/
+├── server.js                  # entry point
+├── app.js                     # express app (untuk test / reuse)
+├── config/
+│   └── supabase.js            # Supabase client (service_role)
+├── routes/                    # definisi endpoint
+│   ├── auth.routes.js         # POST /register, /login; GET /me
+│   ├── users.routes.js
+│   ├── laporan.routes.js
+│   └── perbaikan.routes.js
+├── controllers/               # logika request/response + validasi
+│   ├── auth.controller.js     # register (paksa warga) / login / me
+│   ├── users.controller.js
+│   ├── laporan.controller.js
+│   └── perbaikan.controller.js
+├── models/                    # query ke Supabase per tabel
+│   ├── users.model.js
+│   ├── laporan.model.js
+│   └── perbaikan.model.js
+├── middlewares/
+│   ├── auth.js                # authenticate (Bearer JWT) + authorize(...role)
+│   └── errorHandler.js
+└── utils/
+    └── jwt.js                 # signToken / verifyToken
+migrations/
+├── 001_create_schema.sql      # skema users, laporan, perbaikan
+└── 002_align_roles.sql        # role -> warga | admin | tim_lapangan
 ```
 
----
-
-## Setup & Menjalankan
+## Setup
 
 ```bash
 cd backend
 npm install
 cp .env.example .env
-# isi SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY di file .env
+# isi SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, dan JWT_SECRET di .env
+# JWT_SECRET acak: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 npm run dev    # development (auto-reload)
 npm start      # production
 ```
 
-### Environment Variable
-
-| Variable | Wajib | Default | Deskripsi |
-| :--- | :---: | :--- | :--- |
-| `SUPABASE_URL` | Ya | – | URL project Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Ya | – | Service role key (jangan expose ke frontend) |
-| `PORT` | Tidak | `3000` | Port server |
-
-> Catatan: Next.js dev server juga default port `3000`. Saat jalan bareng frontend secara lokal, set `PORT` backend ke nilai lain (misal `3001`).
-
----
-
 ## Database
 
-Jalankan `migrations/001_create_schema.sql` di Supabase Dashboard → SQL Editor.
+Jalankan di Supabase Dashboard → SQL Editor, **berurutan**:
 
-**Tabel:** `users`, `laporan`, `perbaikan` — beserta index, trigger `updated_at`, dan RLS.
+1. `migrations/001_create_schema.sql` — tabel `users`, `laporan`, `perbaikan`
+2. `migrations/002_align_roles.sql` — selaraskan role ke `warga | admin | tim_lapangan`
 
-**Relasi:**
-- `users 1—N laporan` (via `laporan.user_id`)
-- `laporan 1—N perbaikan` (via `perbaikan.laporan_id`)
-- `users 1—N perbaikan` (via `perbaikan.teknisi_id`)
+Relasi:
 
-**Status yang valid:**
-- Laporan: `pending | diverifikasi | dalam_perbaikan | selesai | ditolak`
-- Perbaikan: `dijadwalkan | dikerjakan | selesai | dibatalkan`
+- `users 1—N laporan` (`laporan.user_id`)
+- `laporan 1—N perbaikan` (`perbaikan.laporan_id`)
+- `users 1—N perbaikan` (`perbaikan.teknisi_id`)
 
----
+## Endpoint
 
-## API Reference
+| Method | Endpoint             | Deskripsi                          |
+|--------|----------------------|------------------------------------|
+| GET    | /health              | Cek status server                  |
+| GET    | /api/users           | List semua user                    |
+| GET    | /api/users/:id       | Detail user                        |
+| POST   | /api/users           | Registrasi user (hash bcrypt)      |
+| PATCH  | /api/users/:id       | Update user                        |
+| DELETE | /api/users/:id       | Hapus user                         |
+| GET    | /api/laporan         | List laporan (?status=, ?user_id=) |
+| GET    | /api/laporan/:id     | Detail laporan (+ data pelapor)    |
+| POST   | /api/laporan         | Buat laporan baru                  |
+| PATCH  | /api/laporan/:id     | Update laporan / status            |
+| DELETE | /api/laporan/:id     | Hapus laporan                      |
+| GET    | /api/perbaikan       | List (?status=, ?laporan_id=, ?teknisi_id=) |
+| GET    | /api/perbaikan/:id   | Detail (+ laporan & teknisi)       |
+| POST   | /api/perbaikan       | Catat perbaikan baru               |
+| PATCH  | /api/perbaikan/:id   | Update perbaikan / status          |
+| DELETE | /api/perbaikan/:id   | Hapus data perbaikan               |
 
-Base URL default: `http://localhost:3000`
+Role: `warga | admin | tim_lapangan`.
+Status laporan: `pending | diverifikasi | dalam_perbaikan | selesai | ditolak`.
+Status perbaikan: `dijadwalkan | dikerjakan | selesai | dibatalkan`.
 
-**Format response sukses:**
+## Autentikasi & Otorisasi
 
-```json
-{ "success": true, "data": { } }
+JWT manual (jsonwebtoken). Password di-hash dengan bcrypt.
+
+| Method | Endpoint             | Akses                          |
+|--------|----------------------|--------------------------------|
+| POST   | /api/auth/register   | Publik → selalu role `warga`   |
+| POST   | /api/auth/login      | Publik → balikan `{ user, token }` |
+| GET    | /api/auth/me         | Token                          |
+
+Kirim token di setiap request terproteksi:
+
+```
+Authorization: Bearer <token>
 ```
 
-**Format error:**
+Matriks akses:
 
-```json
-{ "success": false, "message": "..." }
-```
+| Resource              | warga | tim_lapangan | admin |
+|-----------------------|-------|--------------|-------|
+| Lihat/buat laporan    | ✅    | ✅           | ✅    |
+| Ubah status laporan   | ❌    | ✅           | ✅    |
+| Hapus laporan         | ❌    | ❌           | ✅    |
+| Disposisi perbaikan (POST) | ❌ | ❌        | ✅    |
+| Update progres perbaikan   | ❌ | ✅        | ✅    |
+| Manajemen users       | ❌    | ❌           | ✅    |
 
-### Endpoint
-
-| Method | Endpoint | Deskripsi |
-| :--- | :--- | :--- |
-| GET | `/health` | Cek status server |
-| GET | `/api/users` | List semua user |
-| GET | `/api/users/:id` | Detail user |
-| POST | `/api/users` | Registrasi user (password di-hash bcrypt) |
-| PATCH | `/api/users/:id` | Update user |
-| DELETE | `/api/users/:id` | Hapus user |
-| GET | `/api/laporan` | List laporan (filter: `?status=`, `?user_id=`) |
-| GET | `/api/laporan/:id` | Detail laporan (+ data pelapor) |
-| POST | `/api/laporan` | Buat laporan baru |
-| PATCH | `/api/laporan/:id` | Update laporan / ubah status |
-| DELETE | `/api/laporan/:id` | Hapus laporan |
-| GET | `/api/perbaikan` | List perbaikan (filter: `?status=`, `?laporan_id=`, `?teknisi_id=`) |
-| GET | `/api/perbaikan/:id` | Detail perbaikan (+ laporan & teknisi) |
-| POST | `/api/perbaikan` | Catat perbaikan baru (disposisi) |
-| PATCH | `/api/perbaikan/:id` | Update perbaikan / ubah status |
-| DELETE | `/api/perbaikan/:id` | Hapus data perbaikan |
-
-**Body `POST /api/laporan`** (field wajib: `user_id`, `judul`, `deskripsi`, `lokasi`):
-
-```json
-{
-  "user_id": "uuid-user",
-  "judul": "Jalan berlubang",
-  "deskripsi": "Lubang besar di depan balai desa",
-  "lokasi": "-7.123, 112.456",
-  "kategori": "jalan",
-  "foto_url": "https://.../foto.jpg"
-}
-```
-
----
-
-## Kontrak Penting untuk Frontend
-
-- **Foto dikirim sebagai URL string** (`foto_url`), bukan upload file. Frontend mengunggah foto (misal langsung ke Supabase Storage), lalu mengirim URL-nya ke API.
-- **CORS terbuka** (`cors()`) — frontend di origin mana pun bisa memanggil API.
-- **Role user saat ini:** `admin | teknisi | pelapor` (akan berubah menjadi `warga | admin | tim_lapangan` saat autentikasi diimplementasikan).
-- **Autentikasi belum ada** — endpoint masih terbuka tanpa token. Implementasi JWT + RBAC menyusul.
+Akun `admin`/`tim_lapangan` dibuat oleh admin via `POST /api/users`
+(dengan token admin). `user_id` pada laporan selalu diambil dari token,
+tidak bisa dipalsukan via body request.
