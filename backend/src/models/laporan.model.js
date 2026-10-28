@@ -5,6 +5,7 @@ const TABLE = 'laporan';
 // Relasi: tiap laporan menyertakan data pelapor (users).
 const SELECT_WITH_USER = `
   id, judul, deskripsi, lokasi, kategori, foto_url, status,
+  latitude, longitude,
   user_id, created_at, updated_at,
   pelapor:users!laporan_user_id_fkey (id, nama, email)
 `;
@@ -31,6 +32,18 @@ export async function findById(id) {
   return data ?? null;
 }
 
+export async function findByUserId(userId, filters = {}) {
+  let query = supabase
+    .from(TABLE)
+    .select(SELECT_WITH_USER)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (filters.status) query = query.eq('status', filters.status);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
 export async function create(payload) {
   const { data, error } = await supabase
     .from(TABLE)
@@ -44,6 +57,7 @@ export async function create(payload) {
 export async function updateById(id, fields) {
   const allowed = [
     'judul', 'deskripsi', 'lokasi', 'kategori', 'foto_url', 'status',
+    'latitude', 'longitude',
   ];
   const payload = Object.fromEntries(
     Object.entries(fields).filter(([k]) => allowed.includes(k))
