@@ -1,3 +1,5 @@
+import { riwayatDemo } from "./riwayat-demo";
+
 export async function getApiUrl() {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 }
@@ -38,6 +40,39 @@ export async function createLaporan(payload: any) {
     body: JSON.stringify(payload),
   });
   return data;
+}
+
+export type StatusLaporan =
+  | "pending"
+  | "diverifikasi"
+  | "dalam_perbaikan"
+  | "selesai"
+  | "ditolak";
+
+export interface Laporan {
+  id: string;
+  user_id: string;
+  judul: string;
+  deskripsi: string;
+  lokasi: string;
+  kategori: string;
+  foto_url: string | null;
+  status: StatusLaporan;
+  alasan_penolakan: string | null;
+  created_at: string;
+}
+
+// Mode pratinjau desain: GET /api/laporan/warga/:id butuh JWT yang belum ada
+// di frontend, jadi getRiwayat mengembalikan data contoh, bukan data nyata.
+export const RIWAYAT_DEMO = process.env.NEXT_PUBLIC_RIWAYAT_DEMO === "1";
+
+// Kontrak respons: { success: true, data: Laporan[] }, terbaru dulu.
+export async function getRiwayat(wargaId: string) {
+  if (RIWAYAT_DEMO) return riwayatDemo;
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/laporan/warga/${wargaId}`
+  );
+  return data.data as Laporan[];
 }
 
 export function loadPelapor() {
