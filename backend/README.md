@@ -10,11 +10,12 @@ src/
 ├── server.js                  # entry point
 ├── app.js                     # express app (untuk test / reuse)
 ├── config/
-│   └── supabase.js            # Supabase client (service_role)
+│   ├── supabase.js            # Supabase client (service_role)
+│   └── storage.js             # Upload foto ke bucket + URL publik
 ├── routes/                    # definisi endpoint
 │   ├── auth.routes.js         # POST /register, /login; GET /me
 │   ├── users.routes.js
-│   ├── laporan.routes.js
+│   ├── laporan.routes.js      # + GET /warga/:id, POST multipart foto
 │   └── perbaikan.routes.js
 ├── controllers/               # logika request/response + validasi
 │   ├── auth.controller.js     # register (paksa warga) / login / me
@@ -27,12 +28,14 @@ src/
 │   └── perbaikan.model.js
 ├── middlewares/
 │   ├── auth.js                # authenticate (Bearer JWT) + authorize(...role)
+│   ├── upload.js              # multer: foto max 5 MB, JPG/PNG/WebP
 │   └── errorHandler.js
 └── utils/
     └── jwt.js                 # signToken / verifyToken
 migrations/
 ├── 001_create_schema.sql      # skema users, laporan, perbaikan
-└── 002_align_roles.sql        # role -> warga | admin | tim_lapangan
+├── 002_align_roles.sql        # role -> warga | admin | tim_lapangan
+└── 003_laporan_gps.sql        # kolom latitude, longitude di laporan
 ```
 
 ## Setup
@@ -41,11 +44,22 @@ migrations/
 cd backend
 npm install
 cp .env.example .env
-# isi SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, dan JWT_SECRET di .env
+# isi SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, JWT_SECRET,
+# dan SUPABASE_STORAGE_BUCKET di .env
 # JWT_SECRET acak: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 npm run dev    # development (auto-reload)
 npm start      # production
 ```
+
+## Storage Foto (Supabase Storage)
+
+Buat bucket **sebelum** memakai upload foto (satu kali, di Dashboard):
+
+1. Supabase Dashboard → Storage → New bucket
+2. Nama: `foto-laporan`, centang **Public** (foto kerusakan fasilitas memang untuk dilihat publik), Create
+3. Tidak perlu policy upload — server memakai service_role key yang bypass RLS Storage
+
+Foto diunggah ke path `laporan/<user_id>/<timestamp>-<random>.<ext>`, URL publiknya disimpan di kolom `foto_url`.
 
 ## Database
 
@@ -53,6 +67,7 @@ Jalankan di Supabase Dashboard → SQL Editor, **berurutan**:
 
 1. `migrations/001_create_schema.sql` — tabel `users`, `laporan`, `perbaikan`
 2. `migrations/002_align_roles.sql` — selaraskan role ke `warga | admin | tim_lapangan`
+3. `migrations/003_laporan_gps.sql` — tambah kolom `latitude` dan `longitude` di `laporan`
 
 Relasi:
 
@@ -71,8 +86,9 @@ Relasi:
 | PATCH  | /api/users/:id       | Update user                        |
 | DELETE | /api/users/:id       | Hapus user                         |
 | GET    | /api/laporan         | List laporan (?status=, ?user_id=) |
+| GET    | /api/laporan/warga/:id | Riwayat laporan satu warga (warga: milik sendiri; admin: siapa saja) |
 | GET    | /api/laporan/:id     | Detail laporan (+ data pelapor)    |
-| POST   | /api/laporan         | Buat laporan baru                  |
+| POST   | /api/laporan         | Buat laporan baru (multipart/form-data: field `foto` + `latitude`/`longitude`) |
 | PATCH  | /api/laporan/:id     | Update laporan / status            |
 | DELETE | /api/laporan/:id     | Hapus laporan                      |
 | GET    | /api/perbaikan       | List (?status=, ?laporan_id=, ?teknisi_id=) |
@@ -92,7 +108,7 @@ JWT manual (jsonwebtoken). Password di-hash dengan bcrypt.
 | Method | Endpoint             | Akses                          |
 |--------|----------------------|--------------------------------|
 | POST   | /api/auth/register   | Publik → selalu role `warga`   |
-| POST   | /api/auth/login      | Publik → balikan `{ user, token }` |
+| POST   | /api/auth/login      | Publik → balikan `{ success: true, data: { user, token } }` |
 | GET    | /api/auth/me         | Token                          |
 
 Kirim token di setiap request terproteksi:
@@ -115,3 +131,28 @@ Matriks akses:
 Akun `admin`/`tim_lapangan` dibuat oleh admin via `POST /api/users`
 (dengan token admin). `user_id` pada laporan selalu diambil dari token,
 tidak bisa dipalsukan via body request.
+
+## Unggah Laporan (multipart)
+
+`POST /api/laporan` menerima `multipart/form-data`:
+
+| Field | Wajib | Keterangan |
+|---|---|---|
+| `foto` | Tidak | File gambar (JPG/PNG/WebP, maks 5 MB). Diunggah ke bucket `foto-laporan`, URL publiknya disimpan di `foto_url`. Kalau tidak ada file, `foto_url` dari body tetap dipakai (kompatibel dengan frontend lama). |
+| `judul`, `deskripsi`, `lokasi` | Ya | Teks laporan |
+| `kategori` | Tidak | Kategori fasilitas |
+| `latitude`, `longitude` | Tidak | Koordinat GPS (`-90 s.d. 90` / `-180 s.d. 180`), disimpan di kolom `latitude`/`longitude` |
+
+Contoh (curl):
+
+```bash
+curl -X POST http://localhost:3000/api/laporan \
+  -H "Authorization: <redacted>" \
+  -F "judul=Jalan berlubang" \
+  -F "deskripsi=Lubang besar di tengah jalan" \
+  -F "lokasi=Jl. Merdeka No. 10" \
+  -F "kategori=jalan" \
+  -F "latitude=-7.8167" \
+  -F "longitude=112.0167" \
+  -F "foto=@/path/ke/foto.jpg"
+```
