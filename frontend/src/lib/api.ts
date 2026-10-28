@@ -1,5 +1,3 @@
-import { riwayatDemo } from "./riwayat-demo";
-
 export async function getApiUrl() {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 }
@@ -67,8 +65,14 @@ export interface Laporan {
 export const RIWAYAT_DEMO = process.env.NEXT_PUBLIC_RIWAYAT_DEMO === "1";
 
 // Kontrak respons: { success: true, data: Laporan[] }, terbaru dulu.
+// Jalur demo memakai dynamic import agar data contoh berjarak dari bundle halaman.
+// ponytail: bila env tak diset, webpack tetap memancangkan ~2 kB chunk demo yang
+// tidak pernah dimuat; habis bila next.config mendefinisikan fallback env eksplisit.
 export async function getRiwayat(wargaId: string) {
-  if (RIWAYAT_DEMO) return riwayatDemo;
+  if (RIWAYAT_DEMO) {
+    const { riwayatDemo } = await import("./riwayat-demo");
+    return riwayatDemo;
+  }
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/laporan/warga/${wargaId}`
   );
