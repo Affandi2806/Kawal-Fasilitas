@@ -40,6 +40,45 @@ export async function createLaporan(payload: any) {
   return data;
 }
 
+export type StatusLaporan =
+  | "pending"
+  | "diverifikasi"
+  | "dalam_perbaikan"
+  | "selesai"
+  | "ditolak";
+
+export interface Laporan {
+  id: string;
+  user_id: string;
+  judul: string;
+  deskripsi: string;
+  lokasi: string;
+  kategori: string;
+  foto_url: string | null;
+  status: StatusLaporan;
+  alasan_penolakan: string | null;
+  created_at: string;
+}
+
+// Mode pratinjau desain: GET /api/laporan/warga/:id butuh JWT yang belum ada
+// di frontend, jadi getRiwayat mengembalikan data contoh, bukan data nyata.
+export const RIWAYAT_DEMO = process.env.NEXT_PUBLIC_RIWAYAT_DEMO === "1";
+
+// Kontrak respons: { success: true, data: Laporan[] }, terbaru dulu.
+// Jalur demo memakai dynamic import agar data contoh berjarak dari bundle halaman.
+// ponytail: bila env tak diset, webpack tetap memancangkan ~2 kB chunk demo yang
+// tidak pernah dimuat; habis bila next.config mendefinisikan fallback env eksplisit.
+export async function getRiwayat(wargaId: string) {
+  if (RIWAYAT_DEMO) {
+    const { riwayatDemo } = await import("./riwayat-demo");
+    return riwayatDemo;
+  }
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/laporan/warga/${wargaId}`
+  );
+  return data.data as Laporan[];
+}
+
 export function loadPelapor() {
   const json = localStorage.getItem("kf_pelapor");
   return json ? JSON.parse(json) : null;
