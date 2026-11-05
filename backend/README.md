@@ -35,7 +35,8 @@ src/
 migrations/
 ├── 001_create_schema.sql      # skema users, laporan, perbaikan
 ├── 002_align_roles.sql        # role -> warga | admin | tim_lapangan
-└── 003_laporan_gps.sql        # kolom latitude, longitude di laporan
+├── 003_laporan_gps.sql        # kolom latitude, longitude di laporan
+└── 004_laporan_alasan_penolakan.sql # kolom alasan_penolakan di laporan
 ```
 
 ## Setup
@@ -68,6 +69,7 @@ Jalankan di Supabase Dashboard → SQL Editor, **berurutan**:
 1. `migrations/001_create_schema.sql` — tabel `users`, `laporan`, `perbaikan`
 2. `migrations/002_align_roles.sql` — selaraskan role ke `warga | admin | tim_lapangan`
 3. `migrations/003_laporan_gps.sql` — tambah kolom `latitude` dan `longitude` di `laporan`
+4. `migrations/004_laporan_alasan_penolakan.sql` — tambah kolom `alasan_penolakan` di `laporan`
 
 Relasi:
 
@@ -86,10 +88,13 @@ Relasi:
 | PATCH  | /api/users/:id       | Update user                        |
 | DELETE | /api/users/:id       | Hapus user                         |
 | GET    | /api/laporan         | List laporan (?status=, ?user_id=) |
+| GET    | /api/laporan/all     | Dasbor admin: semua laporan, terbaru dulu (?status=) |
 | GET    | /api/laporan/warga/:id | Riwayat laporan satu warga (warga: milik sendiri; admin: siapa saja) |
 | GET    | /api/laporan/:id     | Detail laporan (+ data pelapor)    |
 | POST   | /api/laporan         | Buat laporan baru (multipart/form-data: field `foto` + `latitude`/`longitude`) |
 | PATCH  | /api/laporan/:id     | Update laporan / status            |
+| PUT    | /api/laporan/:id/status | Validasi admin: Diproses / Ditolak (+ alasan penolakan) |
+| POST   | /api/laporan/:id/disposisi | Disposisi admin: tugaskan ke Tim Lapangan |
 | DELETE | /api/laporan/:id     | Hapus laporan                      |
 | GET    | /api/perbaikan       | List (?status=, ?laporan_id=, ?teknisi_id=) |
 | GET    | /api/perbaikan/:id   | Detail (+ laporan & teknisi)       |
@@ -123,6 +128,9 @@ Matriks akses:
 |-----------------------|-------|--------------|-------|
 | Lihat/buat laporan    | ✅    | ✅           | ✅    |
 | Ubah status laporan   | ❌    | ✅           | ✅    |
+| Validasi status (PUT /:id/status) | ❌ | ❌      | ✅    |
+| Dasbor admin (GET /all) | ❌   | ❌           | ✅    |
+| Disposisi ke Tim Lapangan | ❌  | ❌           | ✅    |
 | Hapus laporan         | ❌    | ❌           | ✅    |
 | Disposisi perbaikan (POST) | ❌ | ❌        | ✅    |
 | Update progres perbaikan   | ❌ | ✅        | ✅    |
@@ -155,4 +163,53 @@ curl -X POST http://localhost:3000/api/laporan \
   -F "latitude=-7.8167" \
   -F "longitude=112.0167" \
   -F "foto=@/path/ke/foto.jpg"
+```
+
+## Validasi & Disposisi Admin
+
+Alur: `pending` → admin validasi (`PUT /:id/status`) → `diverifikasi`
+→ admin disposisi (`POST /:id/disposisi`) → `dalam_perbaikan` → `selesai`.
+"Diproses" di issue = `diverifikasi` (frontend memetakan `diverifikasi` dan
+`dalam_perbaikan` ke label "Diproses").
+
+| Endpoint | Admin saja | Body | Hasil |
+|---|---|---|---|
+| `GET /api/laporan/all` | ✅ | — | Semua laporan, terbaru dulu; filter `?status=` |
+| `PUT /api/laporan/:id/status` | ✅ | `{ "status": "Diproses" \| "Ditolak", "alasan_penolakan": "..." }` | Status jadi `diverifikasi` / `ditolak` |
+| `POST /api/laporan/:id/disposisi` | ✅ | `{ "tim_lapangan_id": "<uuid user>" }` | Baris `perbaikan` baru (status `dijadwalkan`) + laporan jadi `dalam_perbaikan` |
+
+Aturan:
+
+- `PUT /:id/status` hanya menerima `Diproses` / `Ditolak` (alias
+  `diverifikasi` / `ditolak` juga diterima). `alasan_penolakan` **wajib**
+  saat menolak; saat diproses, alasan lama dibersihkan. Alasan tampil di
+  halaman Riwayat saat status `ditolak`.
+- `POST /:id/disposisi`: `tim_lapangan_id` harus user yang ada dan
+  ber-role `tim_lapangan`. Laporan berstatus `ditolak` / `selesai` tidak
+  bisa didisposisikan. Satu laporan boleh punya banyak baris perbaikan.
+
+Contoh (curl, token admin):
+
+```bash
+# Dasbor admin
+curl http://localhost:3000/api/laporan/all \
+  -H "Authorization: Bearer TOKEN_ADMIN"
+
+# Validasi: proses
+curl -X PUT http://localhost:3000/api/laporan/<id>/status \
+  -H "Authorization: Bearer TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"Diproses"}'
+
+# Validasi: tolak (alasan wajib)
+curl -X PUT http://localhost:3000/api/laporan/<id>/status \
+  -H "Authorization: Bearer TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"Ditolak","alasan_penolakan":"Foto tidak jelas, mohon unggah ulang"}'
+
+# Disposisi ke Tim Lapangan
+curl -X POST http://localhost:3000/api/laporan/<id>/disposisi \
+  -H "Authorization: Bearer TOKEN_ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"tim_lapangan_id":"<uuid-tim-lapangan>"}'
 ```
