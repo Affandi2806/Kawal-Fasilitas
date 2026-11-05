@@ -238,3 +238,61 @@ export async function getAnggotaTim(): Promise<AnggotaTim[]> {
     .map((u) => ({ id: String(u.id), nama: u.nama, email: u.email }));
 }
 
+export interface SesiPengguna {
+  id: string;
+  nama: string;
+  email: string;
+  role: "admin" | "tim_lapangan" | "warga";
+  token: string;
+}
+
+// Mode pratinjau desain: login memakai akun demo lokal, bukan POST /api/auth/login.
+export const LOGIN_DEMO = process.env.NEXT_PUBLIC_LOGIN_DEMO === "1";
+
+// Kontrak: POST /api/auth/login -> { success, data: { user, token } };
+// kredensial salah = 401 dan apiFetch melempar Error "[401] ...".
+export async function loginPengguna(
+  email: string,
+  password: string
+): Promise<SesiPengguna> {
+  if (LOGIN_DEMO) {
+    const { cariAkunDemo } = await import("./login-demo");
+    const sesi = cariAkunDemo(email, password);
+    if (!sesi) throw new Error("Email atau password salah");
+    return sesi;
+  }
+  const { data } = await apiFetch(`${await getApiUrl()}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return { ...data.data.user, token: data.data.token } as SesiPengguna;
+}
+
+const SESI_KEY = "kawal-sesi";
+
+export function simpanSesi(sesi: SesiPengguna) {
+  localStorage.setItem(SESI_KEY, JSON.stringify(sesi));
+}
+
+export function bacaSesi(): SesiPengguna | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const json = localStorage.getItem(SESI_KEY);
+    return json ? (JSON.parse(json) as SesiPengguna) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hapusSesi() {
+  localStorage.removeItem(SESI_KEY);
+}
+
+// "warga" dan role tak dikenal sama-sama jatuh ke /riwayat.
+export function ruteUntukRole(role: string): string {
+  if (role === "admin") return "/admin";
+  if (role === "tim_lapangan") return "/tim-lapangan";
+  return "/riwayat";
+}
+
