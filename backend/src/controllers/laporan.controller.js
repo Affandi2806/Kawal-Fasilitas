@@ -1,4 +1,6 @@
 import * as Laporan from '../models/laporan.model.js';
+import * as Perbaikan from '../models/perbaikan.model.js';
+import { findById as findUser } from '../models/users.model.js';
 import { httpError } from '../middlewares/errorHandler.js';
 import { uploadFotoLaporan } from '../config/storage.js';
 
@@ -101,5 +103,70 @@ export async function remove(req, res, next) {
     }
     await Laporan.deleteById(req.params.id);
     res.json({ success: true, message: 'Laporan dihapus' });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/laporan/:id/status — validasi admin: Diproses / Ditolak.
+// "Diproses" di issue = diverifikasi (frontend memetakan diverifikasi &
+// dalam_perbaikan ke label "Diproses"); "Ditolak" = ditolak.
+// Label Indonesia diterima apa adanya (case-insensitive) sebagai alias.
+const STATUS_ALIAS = {
+  diproses: 'diverifikasi',
+  diverifikasi: 'diverifikasi',
+  ditolak: 'ditolak',
+};
+
+export async function updateStatus(req, res, next) {
+  try {
+    if (!(await Laporan.findById(req.params.id))) {
+      throw httpError(404, 'Laporan tidak ditemukan');
+    }
+    const raw = String(req.body.status ?? '').trim().toLowerCase();
+    const status = STATUS_ALIAS[raw];
+    if (!status) {
+      throw httpError(400, 'status harus salah satu dari: Diproses, Ditolak');
+    }
+    // Alasan wajib saat menolak; saat diproses, alasan lama (kalau ada)
+    // dibersihkan supaya tidak tampil lagi di halaman Riwayat.
+    let alasan_penolakan = null;
+    if (status === 'ditolak') {
+      alasan_penolakan = String(req.body.alasan_penolakan ?? '').trim();
+      if (!alasan_penolakan) {
+        throw httpError(400, 'alasan_penolakan wajib diisi saat status Ditolak');
+      }
+    }
+    const laporan = await Laporan.updateById(req.params.id, { status, alasan_penolakan });
+    res.json({ success: true, data: laporan });
+  } catch (err) { next(err); }
+}
+
+// POST /api/laporan/:id/disposisi — admin menugaskan laporan ke Tim Lapangan.
+// Membuat baris perbaikan (status awal dijadwalkan) dan mengubah status
+// laporan menjadi dalam_perbaikan. Laporan yang sudah ditolak/selesai
+// tidak bisa didisposisikan lagi.
+// Urutan: status laporan diubah dulu, baru perbaikan dibuat — kalau
+// pembuatan perbaikan gagal, disposisi bisa diulang tanpa membuat
+// baris perbaikan ganda.
+export async function disposisi(req, res, next) {
+  try {
+    const laporan = await Laporan.findById(req.params.id);
+    if (!laporan) throw httpError(404, 'Laporan tidak ditemukan');
+    if (laporan.status === 'ditolak' || laporan.status === 'selesai') {
+      throw httpError(400, `Laporan berstatus ${laporan.status} tidak bisa didisposisikan`);
+    }
+    const { tim_lapangan_id } = req.body;
+    if (!tim_lapangan_id) throw httpError(400, 'tim_lapangan_id wajib diisi');
+    const anggota = await findUser(tim_lapangan_id);
+    if (!anggota) throw httpError(404, 'Tim Lapangan tidak ditemukan');
+    if (anggota.role !== 'tim_lapangan') {
+      throw httpError(400, 'User yang ditugaskan harus ber-role tim_lapangan');
+    }
+    await Laporan.updateById(laporan.id, { status: 'dalam_perbaikan' });
+    const perbaikan = await Perbaikan.create({
+      laporan_id: laporan.id,
+      teknisi_id: tim_lapangan_id,
+      status: 'dijadwalkan',
+    });
+    res.status(201).json({ success: true, data: perbaikan });
   } catch (err) { next(err); }
 }

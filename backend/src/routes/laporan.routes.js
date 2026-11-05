@@ -8,11 +8,15 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', ctrl.getAll);
-// Daftarkan SEBELUM /:id — kalau tidak, "warga" ditangkap sebagai :id.
+// Daftarkan /all dan /warga/:id SEBELUM /:id — kalau tidak,
+// "all"/"warga" ditangkap sebagai :id.
+router.get('/all', authorize('admin'), ctrl.getAll);
 router.get('/warga/:id', ctrl.getByWarga);
 router.get('/:id', ctrl.getOne);
 router.post('/', uploadFoto, ctrl.create); // user_id diambil dari token, bukan body
 router.patch('/:id', authorize('admin', 'tim_lapangan'), ctrl.update);
+router.put('/:id/status', authorize('admin'), ctrl.updateStatus);
+router.post('/:id/disposisi', authorize('admin'), ctrl.disposisi);
 router.delete('/:id', authorize('admin'), ctrl.remove);
 
 export default router;

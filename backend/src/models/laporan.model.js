@@ -5,7 +5,7 @@ const TABLE = 'laporan';
 // Relasi: tiap laporan menyertakan data pelapor (users).
 const SELECT_WITH_USER = `
   id, judul, deskripsi, lokasi, kategori, foto_url, status,
-  latitude, longitude,
+  alasan_penolakan, latitude, longitude,
   user_id, created_at, updated_at,
   pelapor:users!laporan_user_id_fkey (id, nama, email)
 `;
@@ -57,7 +57,7 @@ export async function create(payload) {
 export async function updateById(id, fields) {
   const allowed = [
     'judul', 'deskripsi', 'lokasi', 'kategori', 'foto_url', 'status',
-    'latitude', 'longitude',
+    'alasan_penolakan', 'latitude', 'longitude',
   ];
   const payload = Object.fromEntries(
     Object.entries(fields).filter(([k]) => allowed.includes(k))
