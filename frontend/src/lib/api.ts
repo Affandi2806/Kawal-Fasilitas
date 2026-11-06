@@ -88,3 +88,65 @@ export function savePelapor(pelapor: any) {
   localStorage.setItem("kf_pelapor", JSON.stringify(pelapor));
 }
 
+export type StatusPerbaikan =
+  | "dijadwalkan"
+  | "dikerjakan"
+  | "selesai"
+  | "dibatalkan";
+
+// Kontrak bentuk Perbaikan dari GET /api/perbaikan (butuh JWT, lihat TIM_LAPANGAN_DEMO).
+export interface Perbaikan {
+  id: string;
+  laporan_id: string;
+  teknisi_id: string;
+  status: StatusPerbaikan;
+  tanggal_mulai: string;
+  tanggal_selesai: string | null;
+  biaya: number | null;
+  catatan: string | null;
+  created_at: string;
+  updated_at: string;
+  laporan: { id: string; judul: string; lokasi: string; status: StatusLaporan } | null;
+  teknisi: { id: string; nama: string; email: string } | null;
+}
+
+// Mode pratinjau desain: /api/perbaikan butuh JWT yang belum ada di frontend,
+// jadi tugas lapangan memakai data contoh, bukan data nyata.
+export const TIM_LAPANGAN_DEMO =
+  process.env.NEXT_PUBLIC_TIM_LAPANGAN_DEMO === "1";
+
+// Kontrak respons: { success: true, data: Perbaikan[] }, terbaru dulu.
+export async function getTugasLapangan(teknisiId: string) {
+  if (TIM_LAPANGAN_DEMO) {
+    const { tugasDemo } = await import("./tugas-demo");
+    return tugasDemo;
+  }
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/perbaikan?teknisi_id=${encodeURIComponent(teknisiId)}`
+  );
+  // "dibatalkan" bukan tugas teknisi, saring keluar.
+  return (data.data as Perbaikan[]).filter((p) => p.status !== "dibatalkan");
+}
+
+// Backend TIDAK punya kolom/endpoint foto bukti perbaikan. Foto bukti hanya
+// data URL sisi klien untuk pratinjau (pola sama seperti foto di /lapor)
+// dan sengaja tidak pernah dikirim ke API ini.
+export async function selesaikanPerbaikan(id: string, catatan?: string) {
+  if (TIM_LAPANGAN_DEMO) {
+    return { success: true };
+  }
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/perbaikan/${encodeURIComponent(id)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: "selesai",
+        tanggal_selesai: new Date().toISOString(),
+        catatan: catatan ?? null,
+      }),
+    }
+  );
+  return data;
+}
+
