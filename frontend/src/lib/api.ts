@@ -58,6 +58,10 @@ export interface Laporan {
   status: StatusLaporan;
   alasan_penolakan: string | null;
   created_at: string;
+  // Kolom respons /api/laporan/all; demo lama (riwayat-demo) tidak punya bidang ini.
+  latitude?: number | null;
+  longitude?: number | null;
+  updated_at?: string;
 }
 
 // Mode pratinjau desain: GET /api/laporan/warga/:id butuh JWT yang belum ada
@@ -148,5 +152,89 @@ export async function selesaikanPerbaikan(id: string, catatan?: string) {
     }
   );
   return data;
+}
+
+// Mode pratinjau desain: /api/laporan/all, PUT status, POST disposisi dan
+// /api/users semuanya butuh JWT admin yang belum ada di frontend, jadi
+// dasbor admin memakai data contoh, bukan data nyata.
+export const ADMIN_DEMO = process.env.NEXT_PUBLIC_ADMIN_DEMO === "1";
+
+export interface AnggotaTim {
+  id: string;
+  nama: string;
+  email: string;
+}
+
+// Kontrak: GET /api/laporan/all -> { success, data: Laporan[] } terbaru dulu.
+export async function getLaporanAdmin(status?: string) {
+  if (ADMIN_DEMO) {
+    const { laporanAdminDemo } = await import("./admin-demo");
+    return status
+      ? laporanAdminDemo.filter((l) => l.status === status)
+      : laporanAdminDemo;
+  }
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/laporan/all${qs}`
+  );
+  return data.data as Laporan[];
+}
+
+// Label "Diproses" disimpan backend sebagai diverifikasi; alasan_penolakan
+// wajib saat "Ditolak" dan dibersihkan backend saat "Diproses".
+export async function validasiLaporan(
+  id: string,
+  keputusan: "Diproses" | "Ditolak",
+  alasan?: string
+) {
+  if (ADMIN_DEMO) {
+    const { laporanAdminDemo } = await import("./admin-demo");
+    const l = laporanAdminDemo.find((x) => x.id === id);
+    if (!l) throw new Error("Laporan tidak ditemukan.");
+    l.status = keputusan === "Diproses" ? "diverifikasi" : "ditolak";
+    l.alasan_penolakan = keputusan === "Ditolak" ? alasan ?? null : null;
+    l.updated_at = new Date().toISOString();
+    return l;
+  }
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/laporan/${encodeURIComponent(id)}/status`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: keputusan,
+        alasan_penolakan: keputusan === "Ditolak" ? alasan : undefined,
+      }),
+    }
+  );
+  return data;
+}
+
+// POST /api/laporan/:id/disposisi -> 201, laporan jadi dalam_perbaikan.
+export async function disposisiLaporan(id: string, timLapanganId: string) {
+  if (ADMIN_DEMO) {
+    return { success: true };
+  }
+  const { data } = await apiFetch(
+    `${await getApiUrl()}/api/laporan/${encodeURIComponent(id)}/disposisi`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tim_lapangan_id: timLapanganId }),
+    }
+  );
+  return data;
+}
+
+// Kontrak: GET /api/users -> semua user (khusus admin); tim = role "tim_lapangan".
+export async function getAnggotaTim(): Promise<AnggotaTim[]> {
+  if (ADMIN_DEMO) {
+    const { anggotaTimDemo } = await import("./admin-demo");
+    return anggotaTimDemo;
+  }
+  const { data } = await apiFetch(`${await getApiUrl()}/api/users`);
+  return (data.data as Array<{ id: unknown; nama: string; email: string; role: string }>)
+    .filter((u) => u.role === "tim_lapangan")
+    .map((u) => ({ id: String(u.id), nama: u.nama, email: u.email }));
 }
 
