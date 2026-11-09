@@ -13,7 +13,7 @@ router.get('/', ctrl.getAll);
 router.get('/all', authorize('admin'), ctrl.getAll);
 router.get('/warga/:id', ctrl.getByWarga);
 router.get('/:id', ctrl.getOne);
-router.post('/', uploadFoto, ctrl.create); // user_id diambil dari token, bukan body
+router.post('/', uploadFoto('foto'), ctrl.create); // user_id diambil dari token, bukan body
 router.patch('/:id', authorize('admin', 'tim_lapangan'), ctrl.update);
 router.put('/:id/status', authorize('admin'), ctrl.updateStatus);
 router.post('/:id/disposisi', authorize('admin'), ctrl.disposisi);

@@ -16,12 +16,14 @@ src/
 │   ├── auth.routes.js         # POST /register, /login; GET /me
 │   ├── users.routes.js
 │   ├── laporan.routes.js      # + GET /warga/:id, POST multipart foto
-│   └── perbaikan.routes.js
+│   ├── perbaikan.routes.js
+│   └── tugas.routes.js        # GET /tugas/:tim_id, PUT /tugas/:id/selesai
 ├── controllers/               # logika request/response + validasi
 │   ├── auth.controller.js     # register (paksa warga) / login / me
 │   ├── users.controller.js
 │   ├── laporan.controller.js
-│   └── perbaikan.controller.js
+│   ├── perbaikan.controller.js
+│   └── tugas.controller.js    # tugas aktif + laporkan selesai + trigger laporan Selesai
 ├── models/                    # query ke Supabase per tabel
 │   ├── users.model.js
 │   ├── laporan.model.js
@@ -36,7 +38,8 @@ migrations/
 ├── 001_create_schema.sql      # skema users, laporan, perbaikan
 ├── 002_align_roles.sql        # role -> warga | admin | tim_lapangan
 ├── 003_laporan_gps.sql        # kolom latitude, longitude di laporan
-└── 004_laporan_alasan_penolakan.sql # kolom alasan_penolakan di laporan
+├── 004_laporan_alasan_penolakan.sql # kolom alasan_penolakan di laporan
+└── 005_perbaikan_foto_after.sql # kolom foto_after_url di perbaikan
 ```
 
 ## Setup
@@ -70,6 +73,7 @@ Jalankan di Supabase Dashboard → SQL Editor, **berurutan**:
 2. `migrations/002_align_roles.sql` — selaraskan role ke `warga | admin | tim_lapangan`
 3. `migrations/003_laporan_gps.sql` — tambah kolom `latitude` dan `longitude` di `laporan`
 4. `migrations/004_laporan_alasan_penolakan.sql` — tambah kolom `alasan_penolakan` di `laporan`
+5. `migrations/005_perbaikan_foto_after.sql` — tambah kolom `foto_after_url` di `perbaikan`
 
 Relasi:
 
@@ -92,7 +96,7 @@ Relasi:
 | GET    | /api/laporan/warga/:id | Riwayat laporan satu warga (warga: milik sendiri; admin: siapa saja) |
 | GET    | /api/laporan/:id     | Detail laporan (+ data pelapor)    |
 | POST   | /api/laporan         | Buat laporan baru (multipart/form-data: field `foto` + `latitude`/`longitude`) |
-| PATCH  | /api/laporan/:id     | Update laporan / status            |
+| PATCH  | /api/laporan/:id     | Update laporan / status (menolak wajib beralasan) |
 | PUT    | /api/laporan/:id/status | Validasi admin: Diproses / Ditolak (+ alasan penolakan) |
 | POST   | /api/laporan/:id/disposisi | Disposisi admin: tugaskan ke Tim Lapangan |
 | DELETE | /api/laporan/:id     | Hapus laporan                      |
@@ -101,6 +105,8 @@ Relasi:
 | POST   | /api/perbaikan       | Catat perbaikan baru               |
 | PATCH  | /api/perbaikan/:id   | Update perbaikan / status          |
 | DELETE | /api/perbaikan/:id   | Hapus data perbaikan               |
+| GET    | /api/tugas/:tim_id   | Tugas aktif satu teknisi (dijadwalkan/dikerjakan, terbaru dulu) |
+| PUT    | /api/tugas/:id/selesai | Laporkan penyelesaian + foto after (multipart field `foto_after`) |
 
 Role: `warga | admin | tim_lapangan`.
 Status laporan: `pending | diverifikasi | dalam_perbaikan | selesai | ditolak`.
@@ -134,6 +140,8 @@ Matriks akses:
 | Hapus laporan         | ❌    | ❌           | ✅    |
 | Disposisi perbaikan (POST) | ❌ | ❌        | ✅    |
 | Update progres perbaikan   | ❌ | ✅        | ✅    |
+| Lihat tugas aktif (GET /tugas/:tim_id) | ❌ | ✅ (milik sendiri) | ✅ |
+| Laporkan penyelesaian (PUT /tugas/:id/selesai) | ❌ | ✅ (tugas sendiri) | ✅ |
 | Manajemen users       | ❌    | ❌           | ✅    |
 
 Akun `admin`/`tim_lapangan` dibuat oleh admin via `POST /api/users`
@@ -184,9 +192,22 @@ Aturan:
   `diverifikasi` / `ditolak` juga diterima). `alasan_penolakan` **wajib**
   saat menolak; saat diproses, alasan lama dibersihkan. Alasan tampil di
   halaman Riwayat saat status `ditolak`.
-- `POST /:id/disposisi`: `tim_lapangan_id` harus user yang ada dan
-  ber-role `tim_lapangan`. Laporan berstatus `ditolak` / `selesai` tidak
-  bisa didisposisikan. Satu laporan boleh punya banyak baris perbaikan.
+- `selesai` adalah status terminal: laporan yang sudah `selesai` tidak
+  bisa diubah statusnya lagi, baik lewat `PUT /:id/status` maupun `PATCH`.
+- `PATCH /:id` mengikuti aturan yang sama — bukan jalan pintas: menolak
+  lewat PATCH juga wajib beralasan, dan status lain membersihkan alasan
+  lama. Mengubah field lain (judul, deskripsi, lokasi, dst.) tetap bisa
+  di laporan yang sudah selesai.
+- `POST /:id/disposisi` hanya menerima laporan berstatus `diverifikasi`
+  (baru divalidasi) atau `dalam_perbaikan` (ganti Tim Lapangan).
+  Laporan `pending` harus divalidasi dulu; yang `ditolak` / `selesai`
+  tidak bisa didisposisikan. `tim_lapangan_id` harus user yang ada dan
+  ber-role `tim_lapangan`. Satu laporan boleh punya banyak baris perbaikan.
+- Disposisi tidak atomik (supabase-js tidak punya transaksi antar
+  panggil): status laporan diubah dulu, baru baris perbaikan dibuat.
+  Kalau pembuatan baris perbaikan gagal, status laporan dikembalikan
+  ke semula (kompensasi) supaya laporan tidak menggantung tanpa tugas,
+  dan disposisi bisa diulang dengan aman.
 
 Contoh (curl, token admin):
 
@@ -213,3 +234,56 @@ curl -X POST http://localhost:3000/api/laporan/<id>/disposisi \
   -H "Content-Type: application/json" \
   -d '{"tim_lapangan_id":"<uuid-tim-lapangan>"}'
 ```
+
+## Eksekusi Perbaikan (Tim Lapangan)
+
+Alur lanjutan: `dalam_perbaikan` → Tim Lapangan menyelesaikan tugas
+(`PUT /tugas/:id/selesai`) → laporan jadi `selesai`.
+
+| Endpoint | Akses | Body | Hasil |
+|---|---|---|---|
+| `GET /api/tugas/:tim_id` | admin (siapa saja) / tim_lapangan (milik sendiri) | — | Tugas aktif teknisi itu: status `dijadwalkan` / `dikerjakan` saja, terbaru dulu, lengkap dengan laporan terkait |
+| `PUT /api/tugas/:id/selesai` | teknisi yang ditugaskan / admin | multipart field `foto_after` (atau `foto_after_url` di body JSON) + `catatan` opsional | Perbaikan jadi `selesai` + `tanggal_selesai` terisi + laporan terkait jadi `selesai` |
+
+Aturan:
+
+- **Foto after wajib.** Tanpa file `foto_after` maupun `foto_after_url`
+  → 400. Foto diunggah ke bucket `foto-laporan` (path
+  `perbaikan/<perbaikan_id>/after-<timestamp>-<random>.<ext>`), URL
+  publiknya disimpan di kolom `foto_after_url` (migrasi 005).
+- **Trigger laporan Selesai.** Laporan terkait berubah menjadi `selesai`
+  hanya bila data perbaikan sudah lengkap: status `selesai` +
+  `tanggal_selesai` terisi + `foto_after_url` ada, dan laporan saat ini
+  `dalam_perbaikan`. Trigger yang sama juga berjalan di
+  `PATCH /api/perbaikan/:id` — jadi alur lama frontend (PATCH
+  `{status: "selesai", tanggal_selesai}`) ikut memicu laporan Selesai,
+  tapi hanya bila foto after sudah tercatat; tanpa foto, laporan tetap
+  `dalam_perbaikan`. Tidak ada trigger di database (PostgREST tidak
+  punya transaksi antar-panggil); logikanya di controller.
+- **Idempotent.** Menyelesaikan tugas yang sudah `selesai` boleh diulang
+  (ganti foto / catatan). Tugas `dibatalkan` tidak bisa diselesaikan.
+- `tanggal_selesai` diisi server (waktu request diterima), bukan dari
+  client. `catatan` opsional; bila tidak dikirim, catatan lama dipertahankan.
+
+Contoh (curl, token tim lapangan):
+
+```bash
+# Tugas aktif saya
+curl http://localhost:3000/api/tugas/<id-tim-lapangan> \
+  -H "Authorization: Bearer TOKEN_TIM"
+
+# Laporkan penyelesaian + foto after
+curl -X PUT http://localhost:3000/api/tugas/<id-perbaikan>/selesai \
+  -H "Authorization: Bearer TOKEN_TIM" \
+  -F "foto_after=@/path/ke/foto-after.jpg" \
+  -F "catatan=Lampu sudah diganti"
+```
+
+Catatan untuk frontend (halaman Tim Lapangan, PR #21): halaman itu
+sekarang menyimpan foto bukti hanya di state klien karena backend belum
+punya kolom foto — kolomnya sekarang ada (`foto_after_url` di respons
+`Perbaikan`, migrasi 005). Tambahkan `foto_after_url: string | null`
+ke interface `Perbaikan` di `frontend/src/lib/api.ts`, dan alihkan
+`selesaikanPerbaikan` dari `PATCH /api/perbaikan/:id` ke
+`PUT /api/tugas/:id/selesai` dengan FormData berisi file foto agar
+foto after benar-benar terkirim dan laporan otomatis jadi Selesai.

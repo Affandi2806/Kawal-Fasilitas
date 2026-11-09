@@ -4,6 +4,7 @@ import cors from 'cors';
 import usersRoutes from './routes/users.routes.js';
 import laporanRoutes from './routes/laporan.routes.js';
 import perbaikanRoutes from './routes/perbaikan.routes.js';
+import tugasRoutes from './routes/tugas.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import { errorHandler, notFound } from './middlewares/errorHandler.js';
 
@@ -21,6 +22,7 @@ export function createApp() {
   app.use('/api/users', usersRoutes);
   app.use('/api/laporan', laporanRoutes);
   app.use('/api/perbaikan', perbaikanRoutes);
+  app.use('/api/tugas', tugasRoutes);
 
   app.use(notFound);
   app.use(errorHandler);
