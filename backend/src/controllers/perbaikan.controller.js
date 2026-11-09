@@ -2,6 +2,7 @@ import * as Perbaikan from '../models/perbaikan.model.js';
 import { findById as findLaporan } from '../models/laporan.model.js';
 import { findById as findUser } from '../models/users.model.js';
 import { httpError } from '../middlewares/errorHandler.js';
+import { flipLaporanToSelesaiIfComplete } from './tugas.controller.js';
 
 const VALID_STATUS = ['dijadwalkan', 'dikerjakan', 'selesai', 'dibatalkan'];
 
@@ -61,7 +62,15 @@ export async function update(req, res, next) {
       }
     }
     const perbaikan = await Perbaikan.updateById(req.params.id, req.body);
-    res.json({ success: true, data: perbaikan });
+    // Trigger yang sama seperti PUT /tugas/:id/selesai: kalau perbaikan
+    // ini jadi lengkap (selesai + tanggal + foto after), laporan terkait
+    // ikut jadi Selesai. Tanpa foto after, laporan tetap dalam_perbaikan.
+    await flipLaporanToSelesaiIfComplete(
+      await Perbaikan.findById(req.params.id)
+    );
+    // Baca ulang supaya relasi laporan di respons sudah Selesai.
+    const fresh = await Perbaikan.findById(req.params.id);
+    res.json({ success: true, data: fresh });
   } catch (err) { next(err); }
 }
 

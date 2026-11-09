@@ -25,3 +25,22 @@ export async function uploadFotoLaporan(buffer, { userId, mimetype }) {
   const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
   return { path, publicUrl: data.publicUrl };
 }
+
+// Unggah buffer foto bukti penyelesaian ("after") ke bucket yang sama.
+// Path: perbaikan/<perbaikan_id>/after-<timestamp>-<random>.<ext>
+export async function uploadFotoAfter(buffer, { perbaikanId, mimetype }) {
+  const ext =
+    mimetype === 'image/png'
+      ? 'png'
+      : mimetype === 'image/webp'
+        ? 'webp'
+        : 'jpg';
+  const filename = `after-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const path = `perbaikan/${perbaikanId}/${filename}`;
+  const { error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(path, buffer, { contentType: mimetype, upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return { path, publicUrl: data.publicUrl };
+}

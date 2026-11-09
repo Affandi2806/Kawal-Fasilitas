@@ -78,12 +78,32 @@ export async function create(req, res, next) {
 
 export async function update(req, res, next) {
   try {
-    if (!(await Laporan.findById(req.params.id))) {
+    const current = await Laporan.findById(req.params.id);
+    if (!current) {
       throw httpError(404, 'Laporan tidak ditemukan');
     }
     const { status } = req.body;
     if (status && !VALID_STATUS.includes(status)) {
       throw httpError(400, `status harus salah satu dari: ${VALID_STATUS.join(', ')}`);
+    }
+    // Aturan status yang sama seperti PUT /:id/status — PATCH lama tidak
+    // boleh jadi jalan pintas: 'selesai' adalah status terminal, dan
+    // menolak wajib beralasan.
+    if (status && current.status === 'selesai' && status !== 'selesai') {
+      throw httpError(400, 'Laporan sudah selesai, status tidak bisa diubah lagi');
+    }
+    if (status === 'ditolak') {
+      const alasan = String(req.body.alasan_penolakan ?? '').trim();
+      if (!alasan) {
+        throw httpError(400, 'alasan_penolakan wajib diisi saat status Ditolak');
+      }
+      req.body.alasan_penolakan = alasan;
+    } else if (status) {
+      // Status lain: bersihkan alasan lama supaya tidak tampil lagi.
+      req.body.alasan_penolakan = null;
+    } else {
+      // Alasan tanpa perubahan status diabaikan.
+      delete req.body.alasan_penolakan;
     }
     if (req.body.latitude !== undefined) {
       req.body.latitude = parseCoordinate(req.body.latitude, 'latitude', -90, 90);
@@ -118,8 +138,12 @@ const STATUS_ALIAS = {
 
 export async function updateStatus(req, res, next) {
   try {
-    if (!(await Laporan.findById(req.params.id))) {
-      throw httpError(404, 'Laporan tidak ditemukan');
+    const laporan = await Laporan.findById(req.params.id);
+    if (!laporan) throw httpError(404, 'Laporan tidak ditemukan');
+    // 'selesai' adalah status terminal — laporan yang sudah selesai
+    // tidak bisa divalidasi ulang.
+    if (laporan.status === 'selesai') {
+      throw httpError(400, 'Laporan sudah selesai, status tidak bisa diubah lagi');
     }
     const raw = String(req.body.status ?? '').trim().toLowerCase();
     const status = STATUS_ALIAS[raw];
@@ -135,23 +159,29 @@ export async function updateStatus(req, res, next) {
         throw httpError(400, 'alasan_penolakan wajib diisi saat status Ditolak');
       }
     }
-    const laporan = await Laporan.updateById(req.params.id, { status, alasan_penolakan });
-    res.json({ success: true, data: laporan });
+    const updated = await Laporan.updateById(req.params.id, { status, alasan_penolakan });
+    res.json({ success: true, data: updated });
   } catch (err) { next(err); }
 }
 
 // POST /api/laporan/:id/disposisi — admin menugaskan laporan ke Tim Lapangan.
 // Membuat baris perbaikan (status awal dijadwalkan) dan mengubah status
-// laporan menjadi dalam_perbaikan. Laporan yang sudah ditolak/selesai
-// tidak bisa didisposisikan lagi.
+// laporan menjadi dalam_perbaikan. Hanya laporan yang sudah divalidasi
+// (diverifikasi) atau sedang diperbaiki (ganti Tim Lapangan) yang bisa
+// didisposisikan: laporan pending harus divalidasi dulu, yang
+// ditolak/selesai tidak bisa didisposisikan.
 // Urutan: status laporan diubah dulu, baru perbaikan dibuat — kalau
-// pembuatan perbaikan gagal, disposisi bisa diulang tanpa membuat
-// baris perbaikan ganda.
+// pembuatan perbaikan gagal, status dikembalikan (kompensasi) supaya
+// laporan tidak menggantung tanpa tugas, dan disposisi bisa diulang
+// tanpa membuat baris perbaikan ganda.
 export async function disposisi(req, res, next) {
   try {
     const laporan = await Laporan.findById(req.params.id);
     if (!laporan) throw httpError(404, 'Laporan tidak ditemukan');
-    if (laporan.status === 'ditolak' || laporan.status === 'selesai') {
+    if (!['diverifikasi', 'dalam_perbaikan'].includes(laporan.status)) {
+      if (laporan.status === 'pending') {
+        throw httpError(400, 'Laporan harus divalidasi dulu (status Diproses) sebelum didisposisikan');
+      }
       throw httpError(400, `Laporan berstatus ${laporan.status} tidak bisa didisposisikan`);
     }
     const { tim_lapangan_id } = req.body;
@@ -161,12 +191,23 @@ export async function disposisi(req, res, next) {
     if (anggota.role !== 'tim_lapangan') {
       throw httpError(400, 'User yang ditugaskan harus ber-role tim_lapangan');
     }
+    const statusSebelumnya = laporan.status;
     await Laporan.updateById(laporan.id, { status: 'dalam_perbaikan' });
-    const perbaikan = await Perbaikan.create({
-      laporan_id: laporan.id,
-      teknisi_id: tim_lapangan_id,
-      status: 'dijadwalkan',
-    });
+    let perbaikan;
+    try {
+      perbaikan = await Perbaikan.create({
+        laporan_id: laporan.id,
+        teknisi_id: tim_lapangan_id,
+        status: 'dijadwalkan',
+      });
+    } catch (err) {
+      // Kompensasi: kembalikan status supaya laporan tidak menggantung
+      // tanpa tugas. Kalau revert ini pun gagal, error asli tetap dilempar.
+      try {
+        await Laporan.updateById(laporan.id, { status: statusSebelumnya });
+      } catch { /* abaikan — error asli yang dilaporkan */ }
+      throw err;
+    }
     res.status(201).json({ success: true, data: perbaikan });
   } catch (err) { next(err); }
 }

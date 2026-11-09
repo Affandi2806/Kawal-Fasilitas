@@ -5,10 +5,23 @@ const TABLE = 'perbaikan';
 // Relasi: tiap perbaikan menyertakan laporan terkait + teknisi yang ditugaskan.
 const SELECT_WITH_RELATIONS = `
   id, laporan_id, teknisi_id, status, tanggal_mulai, tanggal_selesai,
-  biaya, catatan, created_at, updated_at,
+  biaya, catatan, foto_after_url, created_at, updated_at,
   laporan:laporan!perbaikan_laporan_id_fkey (id, judul, lokasi, status),
   teknisi:users!perbaikan_teknisi_id_fkey (id, nama, email)
 `;
+
+// Tugas aktif satu teknisi: status dijadwalkan / dikerjakan saja
+// (selesai dan dibatalkan bukan tugas aktif), terbaru dulu.
+export async function findActiveByTeknisiId(teknisi_id) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(SELECT_WITH_RELATIONS)
+    .eq('teknisi_id', teknisi_id)
+    .in('status', ['dijadwalkan', 'dikerjakan'])
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
 
 export async function findAll(filters = {}) {
   let query = supabase
@@ -46,6 +59,7 @@ export async function create(payload) {
 export async function updateById(id, fields) {
   const allowed = [
     'teknisi_id', 'status', 'tanggal_mulai', 'tanggal_selesai', 'biaya', 'catatan',
+    'foto_after_url',
   ];
   const payload = Object.fromEntries(
     Object.entries(fields).filter(([k]) => allowed.includes(k))
