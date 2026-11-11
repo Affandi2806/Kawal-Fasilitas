@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { bacaSesi, LOGIN_DEMO, loginPengguna, ruteUntukRole, simpanSesi } from "@/lib/api";
 import { AKUN_DEMO } from "@/lib/login-demo";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -88,6 +89,18 @@ export default function LoginPage() {
               {proses ? "Memproses…" : "Masuk"}
             </button>
           </form>
+
+          <div className="mt-5">
+            <div className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-gray-200" />
+              <span className="text-xs text-gray-500">atau</span>
+              <span className="h-px flex-1 bg-gray-200" />
+            </div>
+            <p className="mt-4 text-xs font-medium text-gray-500">Khusus warga</p>
+            <div className="mt-1.5">
+              <GoogleSignInButton redirectTo="/" />
+            </div>
+          </div>
         </div>
 
         {LOGIN_DEMO && (

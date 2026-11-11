@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  bacaSesi,
   getRiwayat,
-  loadPelapor,
   RIWAYAT_DEMO,
   type Laporan,
 } from "@/lib/api";
@@ -71,10 +71,11 @@ export default function RiwayatPage() {
   }, [wargaId]);
 
   useEffect(() => {
-    const p = loadPelapor();
-    // Mode demo boleh tampil tanpa pelapor karena datanya memang contoh;
-    // mode asli tetap butuh identitas pelapor di perangkat ini.
-    const id = p?.id != null ? String(p.id) : RIWAYAT_DEMO ? "demo" : null;
+    const sesi = bacaSesi();
+    // Mode demo boleh tampil tanpa sesi karena datanya memang contoh;
+    // mode asli tetap butuh identitas warga dari sesi.
+    const id =
+      sesi && sesi.role === "warga" ? String(sesi.id) : RIWAYAT_DEMO ? "demo" : null;
     if (id) setWargaId(id);
   }, []);
 
@@ -115,15 +116,15 @@ export default function RiwayatPage() {
 
       {!wargaId ? (
         <div className="rounded-lg border bg-white p-6 text-center">
-          <h2 className="text-lg font-bold">Belum ada data pelapor</h2>
+          <h2 className="text-lg font-bold">Masuk dengan Google</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Kirim satu laporan kerusakan dulu, nanti statusnya bisa Anda pantau di sini.
+            Masuk dengan Google untuk melihat riwayat laporan Anda.
           </p>
           <a
-            href="/lapor"
+            href="/login"
             className="mt-4 inline-block rounded-lg bg-green-700 px-5 py-2.5 font-semibold leading-6 text-white hover:bg-green-800"
           >
-            Lapor Kerusakan
+            Ke Halaman Masuk
           </a>
         </div>
       ) : gagal ? (
