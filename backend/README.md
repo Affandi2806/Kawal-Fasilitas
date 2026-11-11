@@ -11,15 +11,16 @@ src/
 ├── app.js                     # express app (untuk test / reuse)
 ├── config/
 │   ├── supabase.js            # Supabase client (service_role)
-│   └── storage.js             # Upload foto ke bucket + URL publik
+│   ├── storage.js             # Upload foto ke bucket + URL publik
+│   └── google.js              # Verifikasi ID token Google (google-auth-library)
 ├── routes/                    # definisi endpoint
-│   ├── auth.routes.js         # POST /register, /login; GET /me
+│   ├── auth.routes.js         # POST /register, /login, /google; GET /me
 │   ├── users.routes.js
 │   ├── laporan.routes.js      # + GET /warga/:id, POST multipart foto
 │   ├── perbaikan.routes.js
 │   └── tugas.routes.js        # GET /tugas/:tim_id, PUT /tugas/:id/selesai
 ├── controllers/               # logika request/response + validasi
-│   ├── auth.controller.js     # register (paksa warga) / login / me
+│   ├── auth.controller.js     # register (paksa warga) / login / google / me
 │   ├── users.controller.js
 │   ├── laporan.controller.js
 │   ├── perbaikan.controller.js
@@ -120,6 +121,7 @@ JWT manual (jsonwebtoken). Password di-hash dengan bcrypt.
 |--------|----------------------|--------------------------------|
 | POST   | /api/auth/register   | Publik → selalu role `warga`   |
 | POST   | /api/auth/login      | Publik → balikan `{ success: true, data: { user, token } }` |
+| POST   | /api/auth/google     | Publik → tukar ID token Google dengan JWT aplikasi |
 | GET    | /api/auth/me         | Token                          |
 
 Kirim token di setiap request terproteksi:
@@ -147,6 +149,49 @@ Matriks akses:
 Akun `admin`/`tim_lapangan` dibuat oleh admin via `POST /api/users`
 (dengan token admin). `user_id` pada laporan selalu diambil dari token,
 tidak bisa dipalsukan via body request.
+
+## Login Google (Warga)
+
+Latar belakang: identitas pelapor di `/lapor` sebelumnya hanya nama +
+email yang diketik bebas tanpa verifikasi — siapa pun bisa mengirim
+laporan atas nama pemilik email tersebut. Warga sekarang masuk memakai
+Google Sign-In; identitas dibuktikan Google, JWT yang dipakai tetap
+JWT aplikasi kita.
+
+Setup sekali (di luar kode, gratis):
+
+1. Google Cloud Console → APIs & Services → Credentials → Create
+   Credentials → OAuth client ID → Web application.
+2. Authorized JavaScript origins: `https://kawalfasilitas.web.id`
+   (tambah `http://localhost:3001` untuk dev FE).
+3. Salin Client ID ke backend `.env` sebagai `GOOGLE_CLIENT_ID`,
+   dan ke FE sebagai `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
+
+Aturan:
+
+- `POST /api/auth/google` menerima `{ id_token }` (ID token dari
+  Google Identity Services yang dikirim FE). Token diverifikasi dengan
+  `google-auth-library`: signature, audience (harus = Client ID
+  aplikasi), dan masa berlaku.
+- Token tidak valid / audience salah / kedaluwarsa → 401 dengan pesan
+  jelas (bukan 500). Email yang belum terverifikasi di Google → 401.
+- Email belum ada → user baru role `warga` (201). Email sudah ada →
+  pakai user itu apa adanya (200, tidak duplikat; role lama
+  dipertahankan — admin yang masuk lewat Google tetap admin).
+- Respons mengikuti pola auth yang sudah ada:
+  `{ success: true, data: { user, token } }`, token = JWT aplikasi
+  (bukan token Google). User Google tidak bisa login lewat
+  `/api/auth/login` — `password_hash`-nya diisi hash acak yang tidak
+  bisa ditebak.
+- Endpoint auth lama (`/register`, `/login`, `/me`) tidak berubah.
+
+Contoh (curl):
+
+```bash
+curl -X POST http://localhost:3000/api/auth/google \
+  -H "Content-Type: application/json" \
+  -d '{"id_token":"<id_token dari Google Identity Services>"}'
+```
 
 ## Unggah Laporan (multipart)
 

@@ -216,6 +216,7 @@ Authorization: Bearer <token>
 | **GET** | `/health` | Cek status server | Publik |
 | **POST** | `/api/auth/register` | Daftar akun baru (selalu role `warga`) | Publik |
 | **POST** | `/api/auth/login` | Login, balikan `{ success: true, data: { user, token } }` | Publik |
+| **POST** | `/api/auth/google` | Login Google warga: tukar ID token Google dengan JWT aplikasi (user baru → role `warga`, 201) | Publik |
 | **GET** | `/api/auth/me` | Profil user dari token | Token |
 | **GET** | `/api/users` | List semua user | Admin |
 | **GET** | `/api/users/:id` | Detail user | Admin |
