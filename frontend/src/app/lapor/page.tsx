@@ -1,16 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-
-import {
-  loadPelapor,
-  savePelapor,
-  registerPelapor,
-  findPelaporByEmail,
-  createLaporan,
-} from "@/lib/api";
-
-
+import { bacaSesi, hapusSesi, createLaporan, type SesiPengguna } from "@/lib/api";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 import React, { useState, useEffect, ChangeEvent, FormEvent } from "react";
 
@@ -29,7 +20,6 @@ function pesanErrorGeo(err: GeolocationPositionError) {
 
 export default function LaporPage() {
 
-  const router = useRouter();
   const [submitted, setSubmitted] = useState<any>(null);
 
   const [photo, setPhoto] = useState<string | null>(null);
@@ -39,19 +29,15 @@ export default function LaporPage() {
   const [deskripsi, setDeskripsi] = useState("");
   const [lokasiNama, setLokasiNama] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [nama, setNama] = useState("");
-  const [email, setEmail] = useState("");
+  const [sesi, setSesi] = useState<SesiPengguna | null>(null);
+  const [siap, setSiap] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [geoStatus, setGeoStatus] = useState("Mendeteksi lokasi…");
 
-  // load stored reporter info
   useEffect(() => {
-    const stored = loadPelapor();
-    if (stored) {
-      setNama(stored.nama);
-      setEmail(stored.email);
-    }
+    setSesi(bacaSesi());
+    setSiap(true);
   }, []);
 
   // get geolocation once on mount
@@ -106,9 +92,6 @@ setGeoStatus(
     if (!judul) return "Judul wajib diisi.";
     if (deskripsi.length < 10) return "Deskripsi minimal 10 karakter.";
     if (!lokasiNama && !coords) return "Lokasi wajib diisi.";
-    if (nama.trim().length < 3) return "Nama minimal 3 karakter.";
-    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-    if (!emailRegex.test(email)) return "Email tidak valid.";
     return "";
   };
 
@@ -119,19 +102,6 @@ setGeoStatus(
     setError("");
     setLoading(true);
     try {
-      // determine user_id
-      let pelapor = loadPelapor();
-      if (!pelapor || pelapor.email !== email) {
-        try {
-          pelapor = await registerPelapor(nama, email);
-        } catch (err: any) {
-          if (err.message.includes("409")) {
-            const existing = await findPelaporByEmail(email);
-            pelapor = existing;
-          } else throw err;
-        }
-        savePelapor(pelapor);
-      }
       const lokasi =
         lokasiNama && coords
           ? `${lokasiNama} (${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)})`
@@ -139,7 +109,7 @@ setGeoStatus(
           ? lokasiNama
           : `Titik GPS (${coords!.lat.toFixed(6)}, ${coords!.lng.toFixed(6)})`;
 const hasil = await createLaporan({
-          user_id: pelapor.id,
+          user_id: sesi!.id,
           judul,
           deskripsi,
           lokasi,
@@ -164,7 +134,20 @@ const hasil = await createLaporan({
         <p className="text-gray-600">Isi formulir berikut untuk melaporkan kerusakan.</p>
       </header>
         {error && <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-red-800">{error}</div>}
-        {submitted ? (
+        {!siap ? null : !sesi || sesi.role !== "warga" ? (
+          <div className="rounded-lg border bg-white p-6 text-center">
+            <h2 className="text-lg font-bold">Masuk untuk Melapor</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Untuk melaporkan kerusakan fasilitas, Anda perlu masuk dengan akun Google sebagai warga.
+            </p>
+            <div className="mt-4 flex justify-center">
+              <GoogleSignInButton redirectTo="/lapor" />
+            </div>
+            <a href="/" className="mt-4 inline-block text-sm text-green-600 hover:underline">
+              ← Kembali ke Beranda
+            </a>
+          </div>
+        ) : submitted ? (
           <div className="rounded-lg border border-green-700 bg-white p-6 text-center">
             <svg className="mx-auto mb-2" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="green" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
             <h2 className="text-xl font-bold mb-2">Laporan Terkirim</h2>
@@ -178,8 +161,6 @@ const hasil = await createLaporan({
               setJudul("");
               setDeskripsi("");
               setLokasiNama("");
-              setNama("");
-              setEmail("");
               setLoading(false);
               setError("");
             }} className="mr-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-green-800">Buat Laporan Lain</button>
@@ -315,33 +296,23 @@ setGeoStatus(
                 </a>
               )}
             </section>
-            {/* Data Pelapor */}
-            <section className="space-y-2">
-              <div className="flex items-center space-x-2 mb-1">
-                <span className="bg-green-700 text-white text-xs font-bold px-2 py-0.5 rounded">5</span>
-                <span className="font-bold">Data Pelapor</span>
-              </div>
-              <label className="block font-medium mb-1">Nama Lengkap</label>
-              <input
-                type="text"
-                placeholder="Nama Lengkap"
-                value={nama}
-                onChange={(e) => setNama(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 mb-1 focus:outline-none focus:border-green-700"
-              />
-              <label className="block font-medium mb-1">Email</label>
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Identitas pelapor disimpan di perangkat ini untuk laporan berikutnya.
-              </p>
-            </section>
             {/* Submit */}
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{sesi?.nama}</p>
+                <p className="truncate text-xs text-gray-600">{sesi?.email}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  hapusSesi();
+                  window.location.reload();
+                }}
+                className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Keluar
+              </button>
+            </div>
             <button
               type="submit"
               disabled={loading}

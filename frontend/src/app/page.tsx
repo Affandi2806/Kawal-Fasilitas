@@ -1,3 +1,5 @@
+import WargaMasukPanel from "@/components/WargaMasukPanel";
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-white text-gray-900">
@@ -15,12 +17,13 @@ export default function Home() {
              Lapor Kerusakan
           </a>
           <a
-            href="#"
+            href="/riwayat"
             className="rounded-lg border border-gray-300 px-6 py-3 font-medium hover:bg-gray-50"
           >
             Pantau Laporan
           </a>
         </div>
+        <WargaMasukPanel />
       </section>
 
       <section className="mx-auto max-w-3xl px-6 pb-20">
