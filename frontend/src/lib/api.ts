@@ -2,22 +2,43 @@ export async function getApiUrl() {
   return process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 }
 
+const PESAN_TAK_TERHUBUNG =
+  "Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.";
+
 export async function apiFetch(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers);
   if (!headers.has("Authorization")) {
     const sesi = bacaSesi();
     if (sesi?.token) headers.set("Authorization", `Bearer ${sesi.token}`);
   }
+  let res: Response;
   try {
-    const res = await fetch(path, { ...init, headers });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(`[${res.status}] ${data.message || "Terjadi kesalahan"}`);
-    }
-    return { res, data };
-  } catch (err) {
-    throw new Error("Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.");
+    res = await fetch(path, { ...init, headers });
+  } catch {
+    // Hanya kegagalan jaringan; respons HTTP gagal ditangani di bawah.
+    throw new Error(PESAN_TAK_TERHUBUNG);
   }
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    // Respons bukan JSON juga dihitung kegagalan jaringan.
+  }
+  // Sesi tak valid: buang sesi lalu paksa login ulang, kecuali ini
+  // percobaan login sendiri (kredensial salah ditangani halaman login).
+  if (res.status === 401 && !path.includes("/api/auth/login") && !path.includes("/api/auth/google")) {
+    hapusSesi();
+    if (window.location.pathname !== "/login") window.location.href = "/login";
+  }
+  if (!res.ok) {
+    throw new Error(
+      data
+        ? `[${res.status}] ${data.message || "Terjadi kesalahan"}`
+        : PESAN_TAK_TERHUBUNG
+    );
+  }
+  if (!data) throw new Error(PESAN_TAK_TERHUBUNG);
+  return { res, data };
 }
 
 export async function createLaporan(payload: any) {
@@ -47,25 +68,14 @@ export interface Laporan {
   status: StatusLaporan;
   alasan_penolakan: string | null;
   created_at: string;
-  // Kolom respons /api/laporan/all; demo lama (riwayat-demo) tidak punya bidang ini.
+  // Kolom respons /api/laporan/all, opsional (tidak ada di respons warga lama).
   latitude?: number | null;
   longitude?: number | null;
   updated_at?: string;
 }
 
-// Mode pratinjau desain: GET /api/laporan/warga/:id butuh JWT yang belum ada
-// di frontend, jadi getRiwayat mengembalikan data contoh, bukan data nyata.
-export const RIWAYAT_DEMO = process.env.NEXT_PUBLIC_RIWAYAT_DEMO === "1";
-
 // Kontrak respons: { success: true, data: Laporan[] }, terbaru dulu.
-// Jalur demo memakai dynamic import agar data contoh berjarak dari bundle halaman.
-// ponytail: bila env tak diset, webpack tetap memancangkan ~2 kB chunk demo yang
-// tidak pernah dimuat; habis bila next.config mendefinisikan fallback env eksplisit.
 export async function getRiwayat(wargaId: string) {
-  if (RIWAYAT_DEMO) {
-    const { riwayatDemo } = await import("./riwayat-demo");
-    return riwayatDemo;
-  }
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/laporan/warga/${wargaId}`
   );
@@ -78,7 +88,7 @@ export type StatusPerbaikan =
   | "selesai"
   | "dibatalkan";
 
-// Kontrak bentuk Perbaikan dari GET /api/perbaikan (butuh JWT, lihat TIM_LAPANGAN_DEMO).
+// Kontrak bentuk Perbaikan dari GET /api/perbaikan.
 export interface Perbaikan {
   id: string;
   laporan_id: string;
@@ -94,17 +104,8 @@ export interface Perbaikan {
   teknisi: { id: string; nama: string; email: string } | null;
 }
 
-// Mode pratinjau desain: /api/perbaikan butuh JWT yang belum ada di frontend,
-// jadi tugas lapangan memakai data contoh, bukan data nyata.
-export const TIM_LAPANGAN_DEMO =
-  process.env.NEXT_PUBLIC_TIM_LAPANGAN_DEMO === "1";
-
 // Kontrak respons: { success: true, data: Perbaikan[] }, terbaru dulu.
 export async function getTugasLapangan(teknisiId: string) {
-  if (TIM_LAPANGAN_DEMO) {
-    const { tugasDemo } = await import("./tugas-demo");
-    return tugasDemo;
-  }
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/perbaikan?teknisi_id=${encodeURIComponent(teknisiId)}`
   );
@@ -116,9 +117,6 @@ export async function getTugasLapangan(teknisiId: string) {
 // data URL sisi klien untuk pratinjau (pola sama seperti foto di /lapor)
 // dan sengaja tidak pernah dikirim ke API ini.
 export async function selesaikanPerbaikan(id: string, catatan?: string) {
-  if (TIM_LAPANGAN_DEMO) {
-    return { success: true };
-  }
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/perbaikan/${encodeURIComponent(id)}`,
     {
@@ -134,11 +132,6 @@ export async function selesaikanPerbaikan(id: string, catatan?: string) {
   return data;
 }
 
-// Mode pratinjau desain: /api/laporan/all, PUT status, POST disposisi dan
-// /api/users semuanya butuh JWT admin yang belum ada di frontend, jadi
-// dasbor admin memakai data contoh, bukan data nyata.
-export const ADMIN_DEMO = process.env.NEXT_PUBLIC_ADMIN_DEMO === "1";
-
 export interface AnggotaTim {
   id: string;
   nama: string;
@@ -147,12 +140,6 @@ export interface AnggotaTim {
 
 // Kontrak: GET /api/laporan/all -> { success, data: Laporan[] } terbaru dulu.
 export async function getLaporanAdmin(status?: string) {
-  if (ADMIN_DEMO) {
-    const { laporanAdminDemo } = await import("./admin-demo");
-    return status
-      ? laporanAdminDemo.filter((l) => l.status === status)
-      : laporanAdminDemo;
-  }
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/laporan/all${qs}`
@@ -167,15 +154,6 @@ export async function validasiLaporan(
   keputusan: "Diproses" | "Ditolak",
   alasan?: string
 ) {
-  if (ADMIN_DEMO) {
-    const { laporanAdminDemo } = await import("./admin-demo");
-    const l = laporanAdminDemo.find((x) => x.id === id);
-    if (!l) throw new Error("Laporan tidak ditemukan.");
-    l.status = keputusan === "Diproses" ? "diverifikasi" : "ditolak";
-    l.alasan_penolakan = keputusan === "Ditolak" ? alasan ?? null : null;
-    l.updated_at = new Date().toISOString();
-    return l;
-  }
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/laporan/${encodeURIComponent(id)}/status`,
     {
@@ -192,9 +170,6 @@ export async function validasiLaporan(
 
 // POST /api/laporan/:id/disposisi -> 201, laporan jadi dalam_perbaikan.
 export async function disposisiLaporan(id: string, timLapanganId: string) {
-  if (ADMIN_DEMO) {
-    return { success: true };
-  }
   const { data } = await apiFetch(
     `${await getApiUrl()}/api/laporan/${encodeURIComponent(id)}/disposisi`,
     {
@@ -208,10 +183,6 @@ export async function disposisiLaporan(id: string, timLapanganId: string) {
 
 // Kontrak: GET /api/users -> semua user (khusus admin); tim = role "tim_lapangan".
 export async function getAnggotaTim(): Promise<AnggotaTim[]> {
-  if (ADMIN_DEMO) {
-    const { anggotaTimDemo } = await import("./admin-demo");
-    return anggotaTimDemo;
-  }
   const { data } = await apiFetch(`${await getApiUrl()}/api/users`);
   return (data.data as Array<{ id: unknown; nama: string; email: string; role: string }>)
     .filter((u) => u.role === "tim_lapangan")
@@ -226,21 +197,12 @@ export interface SesiPengguna {
   token: string;
 }
 
-// Mode pratinjau desain: login memakai akun demo lokal, bukan POST /api/auth/login.
-export const LOGIN_DEMO = process.env.NEXT_PUBLIC_LOGIN_DEMO === "1";
-
 // Kontrak: POST /api/auth/login -> { success, data: { user, token } };
 // kredensial salah = 401 dan apiFetch melempar Error "[401] ...".
 export async function loginPengguna(
   email: string,
   password: string
 ): Promise<SesiPengguna> {
-  if (LOGIN_DEMO) {
-    const { cariAkunDemo } = await import("./login-demo");
-    const sesi = cariAkunDemo(email, password);
-    if (!sesi) throw new Error("Email atau password salah");
-    return sesi;
-  }
   const { data } = await apiFetch(`${await getApiUrl()}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

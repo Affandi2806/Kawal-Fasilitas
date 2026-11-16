@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import {
+  bacaSesi,
   getAnggotaTim,
   getLaporanAdmin,
   disposisiLaporan,
+  ruteUntukRole,
   validasiLaporan,
   type AnggotaTim,
   type Laporan,
@@ -271,12 +274,23 @@ function KartuLaporan({
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const [daf, setDaf] = useState<Laporan[] | null>(null);
   const [gagal, setGagal] = useState("");
   const [saring, setSaring] = useState("");
   const [anggota, setAnggota] = useState<AnggotaTim[]>([]);
+  // Guard sesi: true hanya setelah sesi terbaca dan role-nya admin.
+  const [sesiOk, setSesiOk] = useState(false);
+
+  useEffect(() => {
+    const s = bacaSesi();
+    if (!s) router.push("/login");
+    else if (s.role !== "admin") router.push(ruteUntukRole(s.role));
+    else setSesiOk(true);
+  }, [router]);
 
   const muat = useCallback(async () => {
+    if (!sesiOk) return;
     setGagal("");
     setDaf(null);
     try {
@@ -288,7 +302,7 @@ export default function AdminPage() {
     // ponytail: gagal memuat anggota tidak memblokir daftar laporan,
     // dropdown hanya kosong sampai Coba Lagi dimatikan filternya.
     setAnggota(await getAnggotaTim().catch(() => []));
-  }, [saring]);
+  }, [saring, sesiOk]);
 
   useEffect(() => {
     muat();
@@ -297,6 +311,9 @@ export default function AdminPage() {
   const perbarui = useCallback((id: string, patch: Partial<Laporan>) => {
     setDaf((prev) => (prev ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x)));
   }, []);
+
+  // Jangan render isi halaman sebelum pengecekan sesi selesai.
+  if (!sesiOk) return null;
 
   return (
     <main className="min-h-screen bg-[#FAFAF8] text-gray-900 p-4 py-6 max-w-xl mx-auto">

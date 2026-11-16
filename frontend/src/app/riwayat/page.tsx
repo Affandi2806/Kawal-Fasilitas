@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   bacaSesi,
   getRiwayat,
-  RIWAYAT_DEMO,
   type Laporan,
 } from "@/lib/api";
 
@@ -71,12 +70,10 @@ export default function RiwayatPage() {
   }, [wargaId]);
 
   useEffect(() => {
+    // Identitas warga hanya dari sesi login Google; tanpa sesi halaman
+    // menampilkan ajakan masuk.
     const sesi = bacaSesi();
-    // Mode demo boleh tampil tanpa sesi karena datanya memang contoh;
-    // mode asli tetap butuh identitas warga dari sesi.
-    const id =
-      sesi && sesi.role === "warga" ? String(sesi.id) : RIWAYAT_DEMO ? "demo" : null;
-    if (id) setWargaId(id);
+    if (sesi && sesi.role === "warga") setWargaId(String(sesi.id));
   }, []);
 
   useEffect(() => {
@@ -109,7 +106,7 @@ export default function RiwayatPage() {
         </div>
         {wargaId && (
           <p className="mt-2 text-xs text-gray-500">
-            {RIWAYAT_DEMO ? "Mode pratinjau: data di bawah hanya contoh. " : ""}Daftar diperbarui otomatis setiap 30 detik.
+            Daftar diperbarui otomatis setiap 30 detik.
           </p>
         )}
       </header>
