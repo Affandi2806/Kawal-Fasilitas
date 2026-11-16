@@ -3,8 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { bacaSesi, LOGIN_DEMO, loginPengguna, ruteUntukRole, simpanSesi } from "@/lib/api";
-import { AKUN_DEMO } from "@/lib/login-demo";
+import { bacaSesi, loginPengguna, ruteUntukRole, simpanSesi } from "@/lib/api";
 import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function LoginPage() {
@@ -102,38 +101,6 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-
-        {LOGIN_DEMO && (
-          <div className="mt-4 rounded-xl border border-dashed border-gray-300 bg-white p-4">
-            <h2 className="text-sm font-semibold">Akun demo untuk mencoba</h2>
-            <div className="mt-2 space-y-2">
-              {AKUN_DEMO.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{a.nama}</p>
-                    <p className="truncate text-xs text-gray-600">
-                      {a.email} · sandi: {a.password}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEmail(a.email);
-                      setPassword(a.password);
-                      setError("");
-                    }}
-                    className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-green-800 hover:bg-gray-50"
-                  >
-                    Pakai
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         <a
           href="/"

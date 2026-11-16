@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ChangeEvent } from "react";
+import { useRouter } from "next/navigation";
 
 import {
+  bacaSesi,
   getTugasLapangan,
+  ruteUntukRole,
   selesaikanPerbaikan,
   type Perbaikan,
+  type SesiPengguna,
 } from "@/lib/api";
-import { TEKNISI_DEMO } from "@/lib/tugas-demo";
 
 const TANGGAL = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",
@@ -33,7 +36,8 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function TimLapanganPage() {
-  // Identitas teknisi demo; nanti diganti user login ber-role tim_lapangan.
+  const router = useRouter();
+  const [sesi, setSesi] = useState<SesiPengguna | null>(null);
   const [tugas, setTugas] = useState<Perbaikan[] | null>(null);
   const [gagal, setGagal] = useState("");
   const [bukaId, setBukaId] = useState<string | null>(null);
@@ -44,14 +48,28 @@ export default function TimLapanganPage() {
   // Backend tidak punya kolom foto bukti, foto hanya hidup di state klien ini.
   const [fotoBukti, setFotoBukti] = useState<Record<string, string>>({});
 
+  // Guard sesi: true hanya setelah sesi terbaca dan role-nya tim_lapangan.
+  const [sesiOk, setSesiOk] = useState(false);
+
+  useEffect(() => {
+    const s = bacaSesi();
+    if (!s) router.push("/login");
+    else if (s.role !== "tim_lapangan") router.push(ruteUntukRole(s.role));
+    else {
+      setSesi(s);
+      setSesiOk(true);
+    }
+  }, [router]);
+
   const muat = useCallback(async () => {
+    if (!sesi) return;
     setGagal("");
     try {
-      setTugas(await getTugasLapangan(TEKNISI_DEMO.id));
+      setTugas(await getTugasLapangan(sesi.id));
     } catch (e) {
       setGagal(e instanceof Error ? e.message : "Terjadi kesalahan");
     }
-  }, []);
+  }, [sesi]);
 
   useEffect(() => {
     muat();
@@ -101,6 +119,9 @@ export default function TimLapanganPage() {
     (t) => t.status === "dijadwalkan" || t.status === "dikerjakan"
   );
   const selesai = (tugas ?? []).filter((t) => t.status === "selesai");
+
+  // Jangan render isi halaman sebelum pengecekan sesi selesai.
+  if (!sesiOk) return null;
 
   const kartu = (t: Perbaikan, aktifBagian: boolean) => (
     <article key={t.id} className="rounded-lg border border-gray-200 bg-white p-4">
@@ -227,7 +248,7 @@ export default function TimLapanganPage() {
           ← Kembali
         </a>
         <h1 className="text-2xl font-bold">Tugas Lapangan</h1>
-        <p className="text-gray-600">Tugas perbaikan untuk {TEKNISI_DEMO.nama}</p>
+        <p className="text-gray-600">Tugas perbaikan untuk {sesi?.nama}</p>
       </header>
 
       {gagal ? (
