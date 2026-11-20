@@ -188,6 +188,26 @@ npm start      # jalankan hasil build
 
 ---
 
+## 🌐 Deployment (Produksi)
+
+Aplikasi sudah online dengan full Vercel, dua project dari repo yang sama, dan auto-deploy dari branch `main`:
+
+| Project Vercel | Root Folder | Domain |
+| --- | --- | --- |
+| `kawal-fasilitas` (frontend) | `frontend/` | https://www.kawalfasilitas.web.id |
+| `kawal-fasilitas-backend` (backend) | `backend/` | https://api.kawalfasilitas.web.id |
+
+- Cek kesehatan backend: `GET https://api.kawalfasilitas.web.id/health`
+- Database tetap di Supabase.
+- Kedua domain aktif dengan HTTPS.
+
+Env diisi di dashboard Vercel pada masing-masing project, nilainya tidak disimpan di repo:
+
+- Frontend: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+- Backend: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`
+
+---
+
 ## 🗄️ Database & Relasi
 
 **Relasi Antar Tabel:**
@@ -240,9 +260,9 @@ Authorization: Bearer <token>
 | **GET** | `/api/tugas/:tim_id` | Tugas aktif satu teknisi | Tim Lapangan (milik sendiri), Admin |
 | **PUT** | `/api/tugas/:id/selesai` | Laporkan selesai + foto after (laporan otomatis jadi `selesai` bila lengkap) | Tim Lapangan (tugas sendiri), Admin |
 
-### ⚠️ Status Integrasi Frontend ↔ Backend
+### ✅ Status Integrasi Frontend ↔ Backend
 
-Halaman login (`/login`) sudah ada: memanggil `POST /api/auth/login` dan menyimpan sesi + token di `localStorage` (kunci `kawal-sesi`), lalu redirect sesuai role. Yang masih dikerjakan (issue #24): pengiriman header `Authorization` di halaman-halaman lain (`/lapor`, `/riwayat`, `/tim-lapangan`, `/admin`) — halaman-halaman itu masih memakai data demo sampai integrasi JWT selesai. Sampai itu dikerjakan, form `/lapor` belum bisa membuat laporan ke backend yang sudah diproteksi (akan `401`).
+Integrasi JWT (issue #24) sudah selesai dan aplikasi sudah live di produksi. Halaman login (`/login`) memanggil `POST /api/auth/login` dan menyimpan sesi + token di `localStorage` (kunci `kawal-sesi`), lalu redirect sesuai role. Header `Authorization: Bearer <token>` dikirim di semua halaman terproteksi (`/lapor`, `/riwayat`, `/tim-lapangan`, `/admin`), dan semua halaman memakai data dari API asli, bukan data demo. Warga juga bisa masuk dengan Google lewat `POST /api/auth/google`, lalu membuat laporan dan melihat riwayatnya di produksi.
 
 ---
 
