@@ -41,13 +41,14 @@ export async function apiFetch(path: string, init?: RequestInit) {
   return { res, data };
 }
 
+// Kontrak respons: { success: true, data: Laporan }; id laporan di data.data.
 export async function createLaporan(payload: any) {
   const { data } = await apiFetch(`${await getApiUrl()}/api/laporan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return data;
+  return data.data;
 }
 
 export type StatusLaporan =
@@ -94,10 +95,11 @@ export interface Perbaikan {
   laporan_id: string;
   teknisi_id: string;
   status: StatusPerbaikan;
-  tanggal_mulai: string;
+  tanggal_mulai: string | null;
   tanggal_selesai: string | null;
   biaya: number | null;
   catatan: string | null;
+  foto_after_url?: string | null;
   created_at: string;
   updated_at: string;
   laporan: { id: string; judul: string; lokasi: string; status: StatusLaporan } | null;
@@ -113,23 +115,18 @@ export async function getTugasLapangan(teknisiId: string) {
   return (data.data as Perbaikan[]).filter((p) => p.status !== "dibatalkan");
 }
 
-// Backend TIDAK punya kolom/endpoint foto bukti perbaikan. Foto bukti hanya
-// data URL sisi klien untuk pratinjau (pola sama seperti foto di /lapor)
-// dan sengaja tidak pernah dikirim ke API ini.
-export async function selesaikanPerbaikan(id: string, catatan?: string) {
+// Kontrak PUT /api/tugas/:id/selesai: multipart/form-data dengan field
+// berkas "foto_after" (wajib) dan "catatan" (opsional); tanggal_selesai
+// diisi server. Respons: { success: true, data: Perbaikan }.
+export async function selesaikanPerbaikan(id: string, foto: File, catatan?: string) {
+  const fd = new FormData();
+  fd.append("foto_after", foto);
+  if (catatan) fd.append("catatan", catatan);
   const { data } = await apiFetch(
-    `${await getApiUrl()}/api/perbaikan/${encodeURIComponent(id)}`,
-    {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        status: "selesai",
-        tanggal_selesai: new Date().toISOString(),
-        catatan: catatan ?? null,
-      }),
-    }
+    `${await getApiUrl()}/api/tugas/${encodeURIComponent(id)}/selesai`,
+    { method: "PUT", body: fd }
   );
-  return data;
+  return data.data as Perbaikan;
 }
 
 export interface AnggotaTim {

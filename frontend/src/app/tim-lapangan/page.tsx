@@ -42,10 +42,12 @@ export default function TimLapanganPage() {
   const [gagal, setGagal] = useState("");
   const [bukaId, setBukaId] = useState<string | null>(null);
   const [foto, setFoto] = useState<string | null>(null);
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
   const [catatanSelesai, setCatatanSelesai] = useState("");
   const [mengirim, setMengirim] = useState(false);
   const [errorSelesai, setErrorSelesai] = useState("");
-  // Backend tidak punya kolom foto bukti, foto hanya hidup di state klien ini.
+  // Backend menyimpan foto bukti sebagai foto_after_url (hasil unggahan
+  // PUT /api/tugas/:id/selesai); dipetakan per id tugas untuk ditampilkan.
   const [fotoBukti, setFotoBukti] = useState<Record<string, string>>({});
 
   // Guard sesi: true hanya setelah sesi terbaca dan role-nya tim_lapangan.
@@ -75,11 +77,12 @@ export default function TimLapanganPage() {
     muat();
   }, [muat]);
 
-  // ponytail: foto hanya pratinjau di memori (tak pernah dikirim), jadi tanpa
-  // resize canvas seperti /lapor; tambahkan bila foto besar menyulitkan.
+  // Pratinjau data URL seperti /lapor; berkas aslinya disimpan untuk
+  // diunggah sebagai multipart field "foto_after" (kontrak backend).
   const pilihFoto = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setFotoFile(file);
     const reader = new FileReader();
     reader.onload = () => setFoto(reader.result as string);
     reader.readAsDataURL(file);
@@ -88,25 +91,26 @@ export default function TimLapanganPage() {
   const tutupForm = () => {
     setBukaId(null);
     setFoto(null);
+    setFotoFile(null);
     setCatatanSelesai("");
     setErrorSelesai("");
   };
 
   const tandaiSelesai = async () => {
-    if (!bukaId) return;
+    if (!bukaId || !fotoFile) return;
     setMengirim(true);
     setErrorSelesai("");
     try {
-      await selesaikanPerbaikan(bukaId, catatanSelesai.trim() || undefined);
-      const idSelesai = bukaId;
-      setTugas((prev) =>
-        (prev ?? []).map((t) =>
-          t.id === idSelesai
-            ? { ...t, status: "selesai" as const, tanggal_selesai: new Date().toISOString() }
-            : t
-        )
+      const fresh = await selesaikanPerbaikan(
+        bukaId,
+        fotoFile,
+        catatanSelesai.trim() || undefined
       );
-      if (foto) setFotoBukti((prev) => ({ ...prev, [idSelesai]: foto }));
+      const idSelesai = bukaId;
+      setTugas((prev) => (prev ?? []).map((t) => (t.id === idSelesai ? fresh : t)));
+      if (fresh.foto_after_url) {
+        setFotoBukti((prev) => ({ ...prev, [idSelesai]: fresh.foto_after_url! }));
+      }
       tutupForm();
     } catch (e) {
       setErrorSelesai(e instanceof Error ? e.message : "Gagal menyelesaikan tugas.");
@@ -146,9 +150,11 @@ export default function TimLapanganPage() {
             </svg>
             <span className="break-words">{t.laporan?.lokasi}</span>
           </p>
-          <p className="mt-1 text-sm text-gray-600">
-            Mulai {TANGGAL.format(new Date(t.tanggal_mulai))}
-          </p>
+          {t.tanggal_mulai && (
+            <p className="mt-1 text-sm text-gray-600">
+              Mulai {TANGGAL.format(new Date(t.tanggal_mulai))}
+            </p>
+          )}
           {t.catatan && (
             <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">
               {t.catatan}
@@ -170,6 +176,7 @@ export default function TimLapanganPage() {
           onClick={() => {
             setBukaId(t.id);
             setFoto(null);
+            setFotoFile(null);
             setCatatanSelesai("");
             setErrorSelesai("");
           }}
