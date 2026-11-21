@@ -1,14 +1,36 @@
 import * as Perbaikan from '../models/perbaikan.model.js';
-import { findById as findLaporan } from '../models/laporan.model.js';
+import * as Laporan from '../models/laporan.model.js';
 import { findById as findUser } from '../models/users.model.js';
 import { httpError } from '../middlewares/errorHandler.js';
 import { flipLaporanToSelesaiIfComplete } from './tugas.controller.js';
 
 const VALID_STATUS = ['dijadwalkan', 'dikerjakan', 'selesai', 'dibatalkan'];
 
+// Cakupan baca per peran: admin semua, tim lapangan hanya perbaikan
+// yang ditugaskan kepadanya, warga hanya perbaikan atas laporannya
+// sendiri dan tanpa email teknisi (kontak teknisi tidak untuk warga).
+function sembunyikanEmailTeknisi(perbaikan) {
+  const teknisi = { ...perbaikan.teknisi };
+  delete teknisi.email;
+  return { ...perbaikan, teknisi };
+}
+
 export async function getAll(req, res, next) {
   try {
     const { status, laporan_id, teknisi_id } = req.query;
+    if (req.user.role === 'tim_lapangan') {
+      // Nilai teknisi_id dari query client selalu diabaikan.
+      const data = await Perbaikan.findAll({ status, laporan_id, teknisi_id: req.user.id });
+      return res.json({ success: true, data });
+    }
+    if (req.user.role === 'warga') {
+      const laporanSaya = await Laporan.findByUserId(req.user.id);
+      const idLaporanSaya = new Set(laporanSaya.map((l) => l.id));
+      const data = (await Perbaikan.findAll({ status, laporan_id, teknisi_id }))
+        .filter((p) => idLaporanSaya.has(p.laporan_id))
+        .map(sembunyikanEmailTeknisi);
+      return res.json({ success: true, data });
+    }
     res.json({ success: true, data: await Perbaikan.findAll({ status, laporan_id, teknisi_id }) });
   } catch (err) { next(err); }
 }
@@ -17,6 +39,16 @@ export async function getOne(req, res, next) {
   try {
     const perbaikan = await Perbaikan.findById(req.params.id);
     if (!perbaikan) throw httpError(404, 'Data perbaikan tidak ditemukan');
+    if (req.user.role === 'tim_lapangan' && perbaikan.teknisi_id !== req.user.id) {
+      throw httpError(403, 'Hanya teknisi yang ditugaskan yang dapat melihat perbaikan ini');
+    }
+    if (req.user.role === 'warga') {
+      const laporan = await Laporan.findById(perbaikan.laporan_id);
+      if (!laporan || laporan.user_id !== req.user.id) {
+        throw httpError(403, 'Hanya boleh melihat perbaikan pada laporan sendiri');
+      }
+      return res.json({ success: true, data: sembunyikanEmailTeknisi(perbaikan) });
+    }
     res.json({ success: true, data: perbaikan });
   } catch (err) { next(err); }
 }
@@ -25,7 +57,7 @@ export async function create(req, res, next) {
   try {
     const { laporan_id, teknisi_id, tanggal_mulai, tanggal_selesai, biaya, catatan } = req.body;
     if (!laporan_id) throw httpError(400, 'laporan_id wajib diisi');
-    if (!(await findLaporan(laporan_id))) throw httpError(404, 'Laporan tidak ditemukan');
+    if (!(await Laporan.findById(laporan_id))) throw httpError(404, 'Laporan tidak ditemukan');
     if (teknisi_id) {
       const teknisi = await findUser(teknisi_id);
       if (!teknisi) throw httpError(404, 'Teknisi tidak ditemukan');
