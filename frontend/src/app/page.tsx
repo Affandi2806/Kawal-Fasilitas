@@ -42,9 +42,6 @@ export default function Home() {
             publik sampai selesai.
           </li>
         </ol>
-        <p className="mt-6 text-sm text-gray-500">
-          Status proyek: setup awal (Next.js + PWA) &mdash; issue #1.
-        </p>
       </section>
     </main>
   );
