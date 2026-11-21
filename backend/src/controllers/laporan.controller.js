@@ -17,6 +17,21 @@ export async function getOne(req, res, next) {
   try {
     const laporan = await Laporan.findById(req.params.id);
     if (!laporan) throw httpError(404, 'Laporan tidak ditemukan');
+    // Cegah IDOR: warga hanya laporan miliknya sendiri, tim lapangan
+    // hanya laporan yang pernah ditugaskan kepadanya; admin bebas.
+    if (req.user.role === 'warga') {
+      if (laporan.user_id !== req.user.id) {
+        throw httpError(403, 'Hanya boleh melihat laporan sendiri');
+      }
+    } else if (req.user.role === 'tim_lapangan') {
+      const ditugaskan = await Perbaikan.findAll({
+        laporan_id: laporan.id,
+        teknisi_id: req.user.id,
+      });
+      if (ditugaskan.length === 0) {
+        throw httpError(403, 'Hanya boleh melihat laporan yang ditugaskan kepada Anda');
+      }
+    }
     res.json({ success: true, data: laporan });
   } catch (err) { next(err); }
 }
@@ -81,6 +96,19 @@ export async function update(req, res, next) {
     const current = await Laporan.findById(req.params.id);
     if (!current) {
       throw httpError(404, 'Laporan tidak ditemukan');
+    }
+    // Tim lapangan menyelesaikan pekerjaan lewat PUT /api/tugas/:id/selesai,
+    // bukan lewat PATCH laporan.
+    if (req.user.role === 'tim_lapangan' && req.body.status !== undefined) {
+      throw httpError(403, 'Tim lapangan tidak dapat mengubah status laporan');
+    }
+    // 'selesai' hanya boleh lahir dari penyelesaian tugas. Pengecualian:
+    // admin tetap boleh menutup laporan yang tidak pernah punya tugas.
+    if (req.body.status === 'selesai') {
+      const adaPerbaikan = await Perbaikan.findAll({ laporan_id: req.params.id });
+      if (adaPerbaikan.length > 0) {
+        throw httpError(400, 'Status selesai hanya boleh terjadi lewat penyelesaian tugas');
+      }
     }
     const { status } = req.body;
     if (status && !VALID_STATUS.includes(status)) {
