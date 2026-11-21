@@ -17,6 +17,21 @@ export async function getOne(req, res, next) {
   try {
     const laporan = await Laporan.findById(req.params.id);
     if (!laporan) throw httpError(404, 'Laporan tidak ditemukan');
+    // Cegah IDOR: warga hanya laporan miliknya sendiri, tim lapangan
+    // hanya laporan yang pernah ditugaskan kepadanya; admin bebas.
+    if (req.user.role === 'warga') {
+      if (laporan.user_id !== req.user.id) {
+        throw httpError(403, 'Hanya boleh melihat laporan sendiri');
+      }
+    } else if (req.user.role === 'tim_lapangan') {
+      const ditugaskan = await Perbaikan.findAll({
+        laporan_id: laporan.id,
+        teknisi_id: req.user.id,
+      });
+      if (ditugaskan.length === 0) {
+        throw httpError(403, 'Hanya boleh melihat laporan yang ditugaskan kepada Anda');
+      }
+    }
     res.json({ success: true, data: laporan });
   } catch (err) { next(err); }
 }
