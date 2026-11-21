@@ -97,6 +97,19 @@ export async function update(req, res, next) {
     if (!current) {
       throw httpError(404, 'Laporan tidak ditemukan');
     }
+    // Tim lapangan menyelesaikan pekerjaan lewat PUT /api/tugas/:id/selesai,
+    // bukan lewat PATCH laporan.
+    if (req.user.role === 'tim_lapangan' && req.body.status !== undefined) {
+      throw httpError(403, 'Tim lapangan tidak dapat mengubah status laporan');
+    }
+    // 'selesai' hanya boleh lahir dari penyelesaian tugas. Pengecualian:
+    // admin tetap boleh menutup laporan yang tidak pernah punya tugas.
+    if (req.body.status === 'selesai') {
+      const adaPerbaikan = await Perbaikan.findAll({ laporan_id: req.params.id });
+      if (adaPerbaikan.length > 0) {
+        throw httpError(400, 'Status selesai hanya boleh terjadi lewat penyelesaian tugas');
+      }
+    }
     const { status } = req.body;
     if (status && !VALID_STATUS.includes(status)) {
       throw httpError(400, `status harus salah satu dari: ${VALID_STATUS.join(', ')}`);
