@@ -47,10 +47,27 @@ export async function create(req, res, next) {
 
 export async function update(req, res, next) {
   try {
-    if (!(await Perbaikan.findById(req.params.id))) {
+    const perbaikanSaatIni = await Perbaikan.findById(req.params.id);
+    if (!perbaikanSaatIni) {
       throw httpError(404, 'Data perbaikan tidak ditemukan');
     }
     const { status, teknisi_id } = req.body;
+    if (req.user.role === 'tim_lapangan') {
+      // Tim hanya boleh menyentuh perbaikan yang ditugaskan kepadanya.
+      if (perbaikanSaatIni.teknisi_id !== req.user.id) {
+        throw httpError(403, 'Hanya teknisi yang ditugaskan yang dapat mengubah perbaikan ini');
+      }
+      // Field terlindungi (biaya, penugasan, bukti selesai) hanya lewat admin.
+      const TERLARANG_TIM = ['biaya', 'teknisi_id', 'foto_after_url', 'tanggal_selesai'];
+      const dilarang = TERLARANG_TIM.filter((f) => req.body[f] !== undefined);
+      if (dilarang.length > 0) {
+        throw httpError(400, `Field tidak boleh diubah oleh tim lapangan: ${dilarang.join(', ')}`);
+      }
+      // Status selesai hanya boleh lahir dari PUT /api/tugas/:id/selesai.
+      if (status !== undefined && status !== 'dikerjakan') {
+        throw httpError(400, 'Tim lapangan hanya dapat mengubah status perbaikan menjadi dikerjakan, penyelesaian dilakukan lewat penyelesaian tugas');
+      }
+    }
     if (status && !VALID_STATUS.includes(status)) {
       throw httpError(400, `status harus salah satu dari: ${VALID_STATUS.join(', ')}`);
     }
